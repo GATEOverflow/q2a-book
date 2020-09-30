@@ -62,6 +62,8 @@
 				return 'Thanks to all the contributors of [site-title].';
 			case 'book_plugin_css':
 				return file_get_contents(dirname(__FILE__).'/book.css');
+			case 'book_plugin_black_css':
+				return file_get_contents(dirname(__FILE__).'/book.css');
 			case 'book_plugin_template':
 				return file_get_contents(dirname(__FILE__).'/template.html');
 			case 'book_plugin_template_front':
@@ -164,6 +166,7 @@
 					qa_opt('book_plugin_specialtags',qa_post_text('book_plugin_specialtags'));
 					
 					qa_opt('book_plugin_css',qa_post_text('book_plugin_css'));
+					qa_opt('book_plugin_black_css',qa_post_text('book_plugin_black_css'));
 					
 					qa_opt('book_plugin_ack',qa_post_text('book_plugin_ack'));
 					qa_opt('book_plugin_intro',qa_post_text('book_plugin_intro'));
@@ -454,6 +457,14 @@
 				'note' => '<i>book.css</i>',
 				'tags' => 'NAME="book_plugin_css"',
 				'value' => qa_opt('book_plugin_css'),
+				'type' => 'textarea',
+				'rows' => '10',
+			);
+			$fields[] = array(
+				'label' => 'Book monochrome CSS',
+				'note' => '<i>book.css</i>',
+				'tags' => 'NAME="book_plugin_black_css"',
+				'value' => qa_opt('book_plugin_black_css'),
 				'type' => 'textarea',
 				'rows' => '10',
 			);
