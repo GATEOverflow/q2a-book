@@ -177,6 +177,7 @@ function qa_book_plugin_createBook($return=false) {
 	$shuffle = qa_opt('book_plugin_shuffle');
 	$iscats = qa_opt('book_plugin_cats');
 	$volume = qa_get('volume');
+	$hideanswers = qa_get('hideanswers');
 	$catinc = "";
 	$cats = array(false);
 	if($iscats) {
@@ -309,6 +310,7 @@ function qa_book_plugin_createBook($return=false) {
 
 		if(empty($qs)) // no questions in this category
 			continue;
+		$answerkeys = array();
 		$cqcount = 0;
 		$ccount++;
 		$q2 = array();
@@ -348,9 +350,13 @@ function qa_book_plugin_createBook($return=false) {
 				if($mint !== '' && !$shuffle)
 				{
 					if(!$skipanswers && qa_opt('book_plugin_push_a') && ($answers != '')){
-						$answerblock = str_replace("[topic]",  gettag($oldmint), $answerblockprefix);
-						$answerblock = str_replace("[topicname]",  $oldmint, $answerblock);
-						$qhtml .=qa_book_answerblockprefix($oldmint,$answerblockprefix). $answers;
+						//if(qa_opt('book_plugin_push_a') && ($answers != '')){
+						//$answerblock = str_replace("[topic]",  gettag($oldmint), $answerblockprefix);
+						//$answerblock = str_replace("[topicname]",  $oldmint, $answerblock);
+						if(!$hideanswers)
+						{
+							$qhtml .=qa_book_answerblockprefix($oldmint,$answerblockprefix). $answers;
+						}
 						$answers='';
 					}
 					$tcount++;
@@ -416,7 +422,7 @@ function qa_book_plugin_createBook($return=false) {
 				}
 				else{
 					echo "Empty answer<br>";
-					echo "<a href='https://gateoverflow.in/".$q['postid']."'>https://gateoverflow.in/".$q['postid']."</a><br>";
+					echo "<a href='".qa_opt('site_url').$q['postid']."'>".qa_opt('site_url').$q['postid']."</a><br>";
 					continue;
 				}
 				$acontent =code_gen($acontent, 1);
@@ -540,7 +546,7 @@ function qa_book_plugin_createBook($return=false) {
 				//$len3 = strlen(strip_tags($arrays[13]));
 				//$len4 = strlen(strip_tags($arrays[17]));
 				$len = $len1+$len2+$len3+$len4;
-				$mlen = 22;
+				$mlen = 20;
 				$mlen2 = 50;
 				if(!strpos($qcontent, "inline-options"))
 				{
@@ -624,7 +630,8 @@ function qa_book_plugin_createBook($return=false) {
 			}
 			if($mint !== '')
 				$mint.=": ";
-			$number="<span class=\"number\">".$ccount.".".$tcount.".".$qcount."</span>";	
+			$nnumber=$ccount.".".$tcount.".".$qcount;	
+			$number="<span class=\"number\">".$nnumber."</span>";	
 			$titleurl = "<a href=\"".qa_opt("site_url").$q['postid']."\">".qa_opt("site_url").$q['postid']."</a>";	
 			$titleqr = code_gen($titleurl, 3);
 			$titleright="<div class=\"title-right\">$titleurl</div>";
@@ -648,8 +655,32 @@ function qa_book_plugin_createBook($return=false) {
 			// output with answers  
 			if($skipanswers)
 				$qhtml .= str_replace('[answers]','',$oneq);
-			else if(qa_opt('book_plugin_push_a') && ($as != '')) {
-				$qhtml .= str_replace('[answers]','<a class="answer-link" href="#a-question'.$q['postid'].'">Answer</a>',$oneq);
+			else if(qa_opt('book_plugin_push_a') ) {
+				$answerkeysql = "select answer_str from ^ec_answers where postid = #";
+				$result = qa_db_query_sub($answerkeysql, $q['postid']);
+				$row = qa_db_read_one_value($result, true);
+				if(!empty($row))
+				{
+					$answerkey = strtoupper($row);
+				}
+				else//if(!$answerkey)
+				{
+					$answerkey = '<a href="'.qa_opt('site_url').$q['postid'].'" target="_blank">q</a>';
+				}
+				//echo $answerkey;
+				$answerkeys[$nnumber]['postid'] = $q['postid'];
+				$answerkeys[$nnumber]['apostid'] = $q['apostid'];
+				$answerkeys[$nnumber]['key']	= $answerkey;
+				if($as != '')
+				{
+				if(!$hideanswers)
+				{
+					$qhtml .= str_replace('[answers]','<a class="answer-link" href="#a-question'.$q['postid'].'">Answer</a>',$oneq);
+				}
+				else
+				{
+					$qhtml .= str_replace('[answers]','',$oneq);
+				}
 				//if($q['aselchildid'] == null) $aid = $q['apostid'];
 				//if($q['selected'] == $q['apostid'] && $q['apostid'] !== NULL){
 				//	$aid = $q['apostid'];
@@ -671,13 +702,19 @@ function qa_book_plugin_createBook($return=false) {
 				$onea = str_replace('[tags]', '', $onea);
 				$onea = str_replace('[hide]', 'hide', $onea);
 				$answers .= str_replace('[answers]',$as,$onea);
+			}
+			else
+				$qhtml .= str_replace('[answers]',$as,$oneq);
 
 			}
 			else
 				$qhtml .= str_replace('[answers]',$as,$oneq);
 		}
 		if(!$skipanswers && qa_opt('book_plugin_push_a')){
-			$qhtml .= qa_book_answerblockprefix($oldmint,$answerblockprefix). $answers;
+			if(!$hideanswers)
+			{
+				$qhtml .= qa_book_answerblockprefix($oldmint,$answerblockprefix). $answers;
+			}
 		}
 		if(!$shuffle)
 			$qhtml = str_replace("[zzzqcount]", $qcount, $qhtml); 
@@ -688,7 +725,8 @@ function qa_book_plugin_createBook($return=false) {
 				$toc = str_replace("[zzzqcount]", $qcount, $toc);
 			}
 			$tocout .= '<li><a href="#cat'.$cat['categoryid'].'" onclick="toggle(\'cat'.$cat['categoryid'].'Details\')" class="toc-cat">'.$cat['title'].'</a> <div class="cat-count">('.$cqcount.')'.'</div> <span id="cat'.$cat['categoryid'].'Details"> <ol class="toc-ul">'.$toc.'</ol></li>';
-
+			$answerkeytable = buildanswerkeytable($answerkeys);
+			print_r($answerkeytable);
 			// todo fix category link
 			$catnumber="<span class=\"number\">$ccount</span>";
 			//	echo print_r($navcats)."<br>".$cat['categoryid']."<br>";
@@ -709,7 +747,7 @@ function qa_book_plugin_createBook($return=false) {
 			$catout = str_replace('[cat-anchor]','cat'.$cat['categoryid'],$catout);
 			$catout = str_replace('[cat-title]',$catnumber.' '.$cat['title'],$catout);
 			$catout = str_replace('[cat-count]',$cqcount,$catout);
-			$catout = str_replace('[questions]',$qhtml,$catout);
+			$catout = str_replace('[questions]',$qhtml.$answerkeytable,$catout);
 			$qout .= $catout;
 		}
 		else {
@@ -875,7 +913,31 @@ function qa_book_plugin_createBook($return=false) {
 
 	//return 'Error creating '.qa_opt('book_plugin_loc').'; check the error log.';
 }
+function buildanswerkeytable($answerkeys)
+{
+	$html = '<h2> Answer Keys</h2><table style="width:100%"> <tr>';
+	$ccount = 0;
+	$cmax = 5;
+	foreach($answerkeys as $post => $postmeta)
+	{
+		$postid = $postmeta['postid'];
+		$apostid = $postmeta['apostid'];
+		$key = $postmeta['key'];
+		//$html .="<td class='akt-td'><table style='width:100%'><tr><td class='akt-id'><a href='#question".$postid."'>$post</a></td><td class='akt-key'><a href='".qa_opt('site_url').$postid."#".$apostid."'>$key</a></td></tr></table></td>";
+		$html .="<td class='akt-id'><a href='#question".$postid."'>$post</a></td><td class='akt-key'><a href='".qa_opt('site_url').$postid."#".$apostid."'>$key</a></td>";
+		$ccount++;
+		if($ccount == $cmax)
+		{
+			$html .='</tr><tr>';
+			$ccount =0;
+		}
 
+
+	}
+	$html .= "</tr></table>";
+	$html = str_replace("<tr></tr>", "", $html);
+	return $html;
+}
 function contrib($array, $type = 0)
 {
 	$string = "";$i = 0;

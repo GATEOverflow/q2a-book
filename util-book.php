@@ -67,6 +67,8 @@ function skiptags($question) {
                                 return true;
                         if(!strncmp($tag, "navathe", 7))
                                 return true;
+                        if(!strncmp($tag, "nielit", 6))
+                                return true;
                         return false;
                 }
                 function mysortanswers($a, $b) {
