@@ -41,10 +41,10 @@ function skiptags($question) {
                         return false;
                 }
                 function ignoredtags($tag){
-			$tags = qa_opt('book_plugin_specialtags');
+			$tags = qa_book_get('book_plugin_specialtags',true);
 			if(in_array($tag,explode(",", $tags)))
 				return true;
-                        if($tag === 'normal' || $tag === 'easy' || $tag === 'difficult' || $tag === 'numerical-answers' || $tag === 'descriptive' || $tag ==='debated' ||$tag ==='algorithms' ||$tag==='marks-to-all' ||$tag === 'co&architecture' ||$tag ==='made-easy' || $tag ==='databases' ||$tag === 'set-theory&algebra' || $tag ==='mathematical-logic' || $tag ==='ds' ||$tag==='theory-of-computation' ||$tag==='out-of-sylabus' ||$tag === 'compiler-design' ||$tag ==='linear-algebra'  ||$tag === 'engineering-mathematics' || $tag ==='graph-theory' || $tag==='calculus' ||$tag==='operating-system' ||$tag ==='computer-networks' ||$tag ==='digital-logic' ||$tag ==='isro' ||$tag ==='verbal-ability' ||$tag ==='numerical-ability' ||$tag==='programming' ||$tag==='non-gate' ||$tag ==='data-structure' ||$tag ==='aptitude' ||$tag ==='proof' ||$tag ==='fortran' ||$tag ==='8085' ||$tag ==='8086'||$tag==='out-of-syllabus-now' ||$tag ==='2015' ||$tag ==='test-series' ||$tag ==='php'){
+                        if($tag === 'normal' || $tag === 'easy' || $tag === 'difficult' || $tag === 'numerical-answers' || $tag === 'descriptive' || $tag ==='debated' ||$tag ==='algorithms' ||$tag==='marks-to-all' ||$tag === 'co&architecture' ||$tag ==='made-easy' || $tag ==='databases' ||$tag === 'set-theory&algebra' || $tag ==='mathematical-logic' || $tag ==='ds' ||$tag==='theory-of-computation' ||$tag==='out-of-sylabus' ||$tag === 'compiler-design' ||$tag ==='linear-algebra'  ||$tag === 'engineering-mathematics' || $tag ==='graph-theory' || $tag==='calculus' ||$tag==='operating-system' ||$tag ==='computer-networks' ||$tag ==='digital-logic' ||$tag ==='isro' ||$tag ==='verbal-ability' ||$tag ==='numerical-ability' ||$tag==='programming' ||$tag==='non-gate' ||$tag ==='data-structure' ||$tag ==='aptitude' ||$tag ==='proof' ||$tag ==='fortran' ||$tag ==='8085' ||$tag ==='8086'||$tag==='out-of-syllabus-now' ||$tag ==='2015' ||$tag ==='test-series' ||$tag ==='php' || $tag==='1-mark' || $tag === '2-marks'){
                         return true;
                 }
                         if(!strncmp($tag, "cat", 3))
@@ -69,6 +69,10 @@ function skiptags($question) {
                                 return true;
                         if(!strncmp($tag, "nielit", 6))
                                 return true;
+                        if(!strncmp($tag, "goclasses", 9))
+                                return true;
+                        if(!strncmp($tag, "go2", 3))
+                                return true;
                         return false;
                 }
                 function mysortanswers($a, $b) {
@@ -83,7 +87,7 @@ function skiptags($question) {
                 function mysorttitle($c, $d){
                         $a=$c[0];
                         $b=$d[0];
-			return strcmp($a['title'], $b['title']);
+			return !strcmp($a['title'], $b['title']);
 		}
                 function mysort($c, $d){
                         $a=$c[0];
@@ -92,7 +96,7 @@ function skiptags($question) {
                         $mint=mintag($a);
                         $mintb=mintag($b);
                         if($mint === '' && $mintb === '')
-				return strcmp($a['title'], $b['title']);
+				return !strcmp($a['title'], $b['title']);
                                 //return 0;
                         if($mint === '')
                                 return -1;
