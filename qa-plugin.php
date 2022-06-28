@@ -159,7 +159,7 @@ function qa_book_set($key, $value, $prefix = null) {
 	if(isset($bookcache[$key])) unset($bookcache[$key]);
 	$table = $pre."book_options";
 	$query = "insert into $table (title, content) values ($,$) on duplicate key update content = $";
-	error_log($query." ".$value." ".$key);
+//	error_log($query." ".$value." ".$key);
 	$result = qa_db_query_sub($query, $key, $value, $value);
 }
 
@@ -336,6 +336,7 @@ function qa_book_plugin_createBook($return=false) {
 		if($qtags) {
 			$booknamesuffix .="_$qtags";
 			$incsql .= " and (qs.tags like '%$qtags%') ";
+			$incsql .= " and (qs.postid in (select postid from ^posttags where wordid = (select wordid from ^words WHERE word = '$qtags' and word = '".qa_strtolower($qtags)."')))";
 
 		}
 		if($volume) $booknamesuffix .="_volume$volume";
@@ -717,6 +718,12 @@ function qa_book_plugin_createBook($return=false) {
 			$oneq = str_replace('[top-link]',($topicanchor? $topicanchor:$catanchor),$oneq);
 			$oneq = str_replace('[tags]', $tagshtml, $oneq);
 			$oneq = str_replace('[hide]', '', $oneq);
+			if(($qtags && (strpos($qtags, "goclasses") !== false)) || qa_get("watermark")) {
+			$oneq = str_replace('[question-watermark]', 'question-content1', $oneq);
+			}
+			else {
+				$oneq = str_replace('[question-watermark]', '', $oneq);
+			}
 			// output with answers  
 			if($skipanswers)
 				$qhtml .= str_replace('[answers]','',$oneq);
@@ -897,7 +904,7 @@ function qa_book_plugin_createBook($return=false) {
 		$tohandle = qa_get_logged_in_handle()? qa_get_logged_in_handle(): qa_get('userhandle');
 		$pdfname = qa_book_get($booknamesuffix,true);
 		if($pdfname && !qa_get('rebuild')) {
-			$command = '/usr/bin/php '.dirname(__FILE__).'/sendemail.php '.qa_opt('site_url').'share/'.$pdfname.'.pdf '.$toemail.' '.$tohandle.' &';
+			$command = '/usr/bin/php '.dirname(__FILE__).'/sendemail.php '.qa_opt('site_url').'share/'.$pdfname.'.pdf "'.$toemail.'" "'.$tohandle.'" &';
                 error_log($command);
                 exec($command);
 
@@ -906,8 +913,7 @@ function qa_book_plugin_createBook($return=false) {
 		error_log("PDF starting");
 		$pdfname = bin2hex(random_bytes(10));
 
-		$command = 'nohup '.dirname(__FILE__).'/wkhtmltopdf \
-			--javascript-delay 12800 -T 20mm -B 20mm --header-spacing 6   --title "GATE Overflow Book" --no-stop-slow-scripts   --load-error-handling ignore  --enable-local-file-access  toc    '.dirname(__FILE__).'/../../'.$file_location.'  --zoom 0.6 --enable-toc-back-links   '.dirname(__FILE__).'/../../share/'.$pdfname.'.pdf  >/dev/null 2>&1 </dev/null && /usr/bin/php '.dirname(__FILE__).'/sendemail.php '.qa_opt('site_url').'share/'.$pdfname.'.pdf '.$toemail.' '.$tohandle.' &';
+		$command = 'nohup '.dirname(__FILE__).'/wkhtmltopdf --javascript-delay 12800 -T 20mm -B 20mm --header-spacing 6   --title "GATE Overflow Book" --no-stop-slow-scripts   --load-error-handling ignore  --enable-local-file-access  toc    '.dirname(__FILE__).'/../../'.$file_location.'  --zoom 0.6 --enable-toc-back-links   '.dirname(__FILE__).'/../../share/'.$pdfname.'.pdf  >/dev/null 2>&1 </dev/null && /usr/bin/php '.dirname(__FILE__).'/sendemail.php "'.qa_opt('site_url').'share/'.$pdfname.'.pdf" "'.$toemail.'" "'.$tohandle.'" &';
 		error_log($command);
 		qa_book_set($booknamesuffix, $pdfname, true);
 		exec($command);
