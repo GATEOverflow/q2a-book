@@ -42,7 +42,7 @@ function get_branch_table($branch, $table) {
 		return "qacivil_$table";
 	}
 	else {
-		return "qa${branch}_$table";
+		return "qa{$branch}_$table";
 	}
 }
 function code_gen($content, $type = 0, $branch = null)
@@ -549,10 +549,18 @@ function qa_book_plugin_createBook($return=false) {
 	$extras='';
 	if(qa_book_get('qa-mathjax-enable', null, null ) == 1)
 	{
-		$mathjax_header = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">' .
-			'<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>' .
-			'<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"' .
-			' onload="renderMathInElement(document.body, {delimiters:[{left:\'$$\',right:\'$$\',display:true},{left:\'$\',right:\'$\',display:false},{left:\'\\\\(\',right:\'\\\\)\',display:false},{left:\'\\\\[\',right:\'\\\\]\',display:true}],throwOnError:false})"></script>';
+		//$mathjax_header =  qa_book_get('qa-mathjax-config', null, null);
+		$mathjax_header =  '<script  type="text/x-mathjax-config">  
+			MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ [\'$\',\'$\'], ["\\\\(","\\\\)"] ],
+     config: ["MMLorHTML.js"],
+      jax: ["input/TeX"],
+      processEscapes: true
+    },
+  });
+
+</script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>';
 		$extras.=   $mathjax_header;
 	}
 	if(qa_book_get("qa-prettify-enable", null, null) == 1)
@@ -616,7 +624,7 @@ function qa_book_plugin_createBook($return=false) {
 		}
 	}
 	if($gate_da) {
-		$catinc = " and qs.categoryid in (2,12,13,28,33,35,36,37,99,108,109,116,117,119)";
+		$catinc = " and qs.categoryid in (2,12,13,17,28,29,33,35,36,37,99,108,109,116,117,119)";
 	}
 	//$catinc = "";
 	// categories
@@ -727,6 +735,9 @@ function qa_book_plugin_createBook($return=false) {
 
 		}
 		if($volume) $booknamesuffix .="_volume$volume";
+		if(!$hideanswers) {
+			$booknamesuffix .= "_with_answers";
+		}
 		if($skipanswers){
 			$anssql .= ' AND  (ans.postid < 0 OR  '; 
 		}else $anssql .=' AND ( ';
@@ -742,7 +753,7 @@ function qa_book_plugin_createBook($return=false) {
 		}
 		if(!$gate_em) {
 			if($gate_da) {
-				$incsql .= " and ( (qs.title like 'GATE%' and qs.tags like '%gate%')  or (qs.title like 'UGC%' and qs.tags like '%ugc%') or (qs.title like 'GO Classes%' and qs.tags like '%goclasses%') )";
+				$incsql .= " and ( (qs.title like 'GATE%' and qs.tags like '%gate%' and qs.title not like 'GATE Overflow%' and qs.title not like 'GATE Suitability%')  or (qs.title like 'UGC%' and qs.tags like '%ugc%') or (qs.title like 'GO Classes%' and qs.tags like '%goclasses%') )";
 				$booknamesuffix .= "_gate_da";
 			}
 		$wrongsql = ' ('.$allowemptyq.' ans.postid not in (select postid from ^postmetas where title like "wrong" and content = 1))) ';
@@ -1173,7 +1184,7 @@ function qa_book_plugin_createBook($return=false) {
 				}
 				else//if(!$answerkey)
 				{
-					$answerkey = '<a href="'.qa_network_get($branch).$q['postid'].'" target="_blank">Q-Q</a>';
+					$answerkey = '<a href="'.qa_network_get($branch).$q['postid'].'" target="_blank">TBA</a>';
 				}
 				//echo $answerkey;
 				//if($acount <= 1)//arjun
