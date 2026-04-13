@@ -1,13 +1,13 @@
 {
   "name": "Q2A Book",
-  "uri": "https://github.com/arjunsuresh/q2a-book",
+  "uri": "https://github.com/gateoverflow/q2a-book",
   "description": "Adds option to generate HTML/PDF from Q2A site",
   "version": "1.2",
   "date": "2016-12-16",
   "author": "Noah, Arjun",
   "author_uri": "http://armi.in/arjun",
   "license": "GPLv2",
-  "update_uri": "https://raw.githubusercontent.com/arjunsuresh/q2a-book/master/metadata.json",
+  "update_uri": "https://raw.githubusercontent.com/gateoverflow/q2a-book/master/metadata.json",
   "min_q2a": "1.5",
   "min_php": "5.1.6"
 }
