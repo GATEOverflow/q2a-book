@@ -441,7 +441,8 @@ function qa_book_plugin_createBook($return=false) {
 
     // Handle make_topic_exam GET request
     if (qa_get('make_topic_exam')) {
-        if (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
+        $isCron = (qa_get('cron') === 'true');
+        if (!$isCron && (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN)) {
             echo '<h2>Admin access required.</h2>';
             return 'Access denied.';
         }
