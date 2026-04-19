@@ -202,7 +202,7 @@ function qa_book_set($key, $value, $prefix = null) {
  * Create topic-wise exams from the book's category/topic structure.
  *
  * URL params (all optional):
- *   make-topic-exam=1          — trigger creation
+ *   make_topic_exam=1          — trigger creation
  *   volume=1|2|3               — limit to book volume categories
  *   catid=2,12,15              — limit to specific category IDs (comma-separated)
  *   max=20                     — max questions per test (default 15)
@@ -437,6 +437,107 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 }
 
 function qa_book_plugin_createBook($return=false) {
+    // Handle make_topic_exam GET request
+    if (qa_get('make_topic_exam')) {
+        if (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
+            echo '<h2>Admin access required.</h2>';
+            return 'Access denied.';
+        }
+
+        $volumeMap = [
+            1 => [13, 26, 27, 28, 29, 30, 31, 32, 33, 35, 112, 113],
+            2 => [2, 12, 14, 18, 36, 37, 15, 16, 17, 19, 22],
+            3 => [15, 16, 17, 19, 22],
+        ];
+
+        // Handle delete
+        if (qa_get('delete')) {
+            $deleted = qa_db_read_one_value(qa_db_query_sub(
+                "SELECT COUNT(*) FROM ^exams WHERE title LIKE 'GATE CSE PYQs |%'"
+            ), true);
+            qa_db_query_sub("DELETE FROM ^exams WHERE title LIKE 'GATE CSE PYQs |%'");
+            echo "<h2>Deleted $deleted topic exams.</h2>";
+            echo '<p><a href="' . qa_path('book', ['make_topic_exam' => 1]) . '">Back to Topic Exam Creator</a></p>';
+            return "Deleted $deleted topic exams.";
+        }
+
+        // Parse filters
+        $filterCatIds = null;
+        $volume = qa_get('volume');
+        $catidParam = qa_get('catid');
+        $maxPerTest = (int)(qa_get('max') ?: 15);
+        if ($maxPerTest < 1) $maxPerTest = 15;
+        $dryrun = (bool)qa_get('dryrun');
+        $minTopicQs = qa_get('merge-single') ? max(2, (int)(qa_get('min-topic') ?: 2)) : 0;
+
+        if ($volume && isset($volumeMap[(int)$volume])) {
+            $filterCatIds = $volumeMap[(int)$volume];
+        } elseif ($catidParam) {
+            $filterCatIds = array_map('intval', explode(',', $catidParam));
+        }
+
+        $result = qa_book_make_topic_exams($filterCatIds, $maxPerTest, $dryrun, $minTopicQs);
+
+        // Render output
+        $action = $dryrun ? 'Would create' : 'Created';
+        $html = "<h2>$action {$result['created']} topic exams</h2>";
+
+        if ($dryrun) {
+            $html .= '<p><em>Dry run — no exams were created.</em> ';
+            $params = ['make_topic_exam' => 1];
+            if ($volume) $params['volume'] = $volume;
+            if ($catidParam) $params['catid'] = $catidParam;
+            if ($maxPerTest != 15) $params['max'] = $maxPerTest;
+            if ($minTopicQs > 0) { $params['merge-single'] = 1; $params['min-topic'] = $minTopicQs; }
+            $html .= '<a href="' . qa_path('book', $params) . '"><strong>Create for real &rarr;</strong></a></p>';
+        }
+
+        // Summary table by subject
+        $subjects = [];
+        foreach ($result['log'] as $entry) {
+            $parts = array_map('trim', explode('|', $entry['title']));
+            $subj = $parts[1] ?? '?';
+            if (!isset($subjects[$subj])) $subjects[$subj] = ['created' => 0, 'skipped' => 0, 'qs' => 0];
+            if ($entry['action'] === 'skip') {
+                $subjects[$subj]['skipped']++;
+            } else {
+                $subjects[$subj]['created']++;
+                $subjects[$subj]['qs'] += $entry['qs'] ?? 0;
+            }
+        }
+        ksort($subjects);
+
+        if (!empty($subjects)) {
+            $html .= '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:16px 0">';
+            $html .= '<tr><th>Subject</th><th>New</th><th>Skipped</th><th>Questions</th></tr>';
+            foreach ($subjects as $sName => $s) {
+                $html .= '<tr><td>' . htmlspecialchars($sName) . '</td><td>' . $s['created']
+                    . '</td><td>' . $s['skipped'] . '</td><td>' . $s['qs'] . '</td></tr>';
+            }
+            $html .= '</table>';
+        }
+
+        // Usage guide
+        $baseUrl = qa_path('book', ['make_topic_exam' => 1]);
+        $html .= '<h3>URL Controls</h3><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:8px 0;font-size:14px">';
+        $html .= '<tr><th>Action</th><th>URL</th></tr>';
+        $html .= '<tr><td>Dry run (all)</td><td><a href="' . $baseUrl . '&dryrun=1">' . $baseUrl . '&amp;dryrun=1</a></td></tr>';
+        $html .= '<tr><td>Create all</td><td><a href="' . $baseUrl . '">' . $baseUrl . '</a></td></tr>';
+        $html .= '<tr><td>Volume 1 (Math + Aptitude)</td><td><a href="' . $baseUrl . '&volume=1&dryrun=1">&amp;volume=1</a></td></tr>';
+        $html .= '<tr><td>Volume 2 (CS Technical)</td><td><a href="' . $baseUrl . '&volume=2&dryrun=1">&amp;volume=2</a></td></tr>';
+        $html .= '<tr><td>Volume 3 (CO,OS,DB,Net,DL)</td><td><a href="' . $baseUrl . '&volume=3&dryrun=1">&amp;volume=3</a></td></tr>';
+        $html .= '<tr><td>Specific categories</td><td>' . $baseUrl . '&amp;catid=2,12,15&amp;dryrun=1</td></tr>';
+        $html .= '<tr><td>Custom max per test</td><td>' . $baseUrl . '&amp;max=20</td></tr>';
+        $html .= '<tr><td>Merge small topics</td><td><a href="' . $baseUrl . '&merge-single=1&dryrun=1">&amp;merge-single=1</a></td></tr>';
+        $html .= '<tr><td>Merge topics &lt; N questions</td><td>' . $baseUrl . '&amp;merge-single=1&amp;min-topic=3</td></tr>';
+        $html .= '<tr><td>Delete all topic exams</td><td><a href="' . $baseUrl . '&delete=1" onclick="return confirm(\'Delete all GATE CSE PYQs topic exams?\')">&amp;delete=1</a></td></tr>';
+        $html .= '<tr><td>View topic exams index</td><td><a href="' . qa_path('topic-exams') . '">/topic-exams</a></td></tr>';
+        $html .= '</table>';
+
+        echo $html;
+        return "$action {$result['created']} topic exams.";
+    }
+
     $globalquestioncount = 0;
     $globalanswercount = 0;
     $book = qa_book_get('book_plugin_template');
