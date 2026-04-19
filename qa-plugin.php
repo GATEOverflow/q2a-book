@@ -437,6 +437,8 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 }
 
 function qa_book_plugin_createBook($return=false) {
+    set_time_limit(600); // book generation can be slow
+
     // Handle make_topic_exam GET request
     if (qa_get('make_topic_exam')) {
         if (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {

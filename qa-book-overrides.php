@@ -3,6 +3,12 @@ function qa_get_request_content() {
 	if(qa_opt('book_plugin_active')) {
 		$requestlower=strtolower(qa_request());
 		if($requestlower && $requestlower === qa_opt('book_plugin_request')) {
+			// Handle make_topic_exam independently of book generation
+			if (qa_get('make_topic_exam')) {
+				qa_book_plugin_createBook();
+				return false;
+			}
+
 			if(qa_opt('book_plugin_static') && file_exists(qa_opt('book_plugin_loc'))) {
 				if(qa_opt('book_plugin_refresh') && ((qa_opt('book_plugin_refresh_time') && (int)qa_opt('book_plugin_refresh_hours')) || (qa_get('cron') == 'true' && qa_opt('book_plugin_refresh_cron'))) && time() > qa_opt('book_plugin_refresh_last')+(qa_opt('book_plugin_refresh_hours')*60*60)) {
 					qa_book_plugin_createBook();
