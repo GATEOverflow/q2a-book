@@ -391,8 +391,8 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 						 post_ids_apti_1_mark, post_ids_apti_2_mark,
 						 post_ids_technical_1_mark, post_ids_technical_2_mark,
 						 penalty_aptitude, penalty_technical, num_options, shuffle,
-						 categoryid, userid, type)
-						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E')",
+						 categoryid, userid, type, examtype)
+						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E', 4)",
 						$title,
 						$timeAllotted,
 						$totalQs,
@@ -484,8 +484,8 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 						 post_ids_apti_1_mark, post_ids_apti_2_mark,
 						 post_ids_technical_1_mark, post_ids_technical_2_mark,
 						 penalty_aptitude, penalty_technical, num_options, shuffle,
-						 categoryid, userid, type)
-						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E')",
+						 categoryid, userid, type, examtype)
+						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E', 4)",
 						$mTitle, $mTime, $mTotalQs, $mTotalMarks,
 						implode(',', $mChunk1), implode(',', $mChunk2),
 						$examCatId, $userid
