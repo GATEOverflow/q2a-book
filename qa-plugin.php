@@ -296,8 +296,9 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 			// If merge enabled and this topic is too small, collect into merge bucket
 			if ($minTopicQs > 0 && count($filtered) < $minTopicQs) {
 				if (!isset($mergeBuckets[$subject])) {
-					$mergeBuckets[$subject] = ['oneMark' => [], 'twoMark' => [], 'categoryid' => $categoryid];
+					$mergeBuckets[$subject] = ['topics' => [], 'categoryid' => $categoryid];
 				}
+				$topicEntry = ['name' => $topicName, 'oneMark' => [], 'twoMark' => []];
 				foreach ($filtered as $q) {
 					$tags = explode(',', $q['tags']);
 					$is2 = false;
@@ -305,9 +306,10 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 						$t = trim($t);
 						if (in_array($t, ['2-marks', '2marks', '2mark', 'two-marks', 'two-mark'])) { $is2 = true; break; }
 					}
-					if ($is2) $mergeBuckets[$subject]['twoMark'][] = $q['postid'];
-					else $mergeBuckets[$subject]['oneMark'][] = $q['postid'];
+					if ($is2) $topicEntry['twoMark'][] = $q['postid'];
+					else $topicEntry['oneMark'][] = $q['postid'];
 				}
+				$mergeBuckets[$subject]['topics'][] = $topicEntry;
 				continue;
 			}
 
@@ -384,52 +386,91 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 		}
 	}
 
-	// Create "Mixed Topics" tests from merged small-topic buckets
+	// Create merged topic exams from small-topic buckets
+	// Combine adjacent small topics until each group has >= $minTopicQs questions
 	foreach ($mergeBuckets as $mSubject => $bucket) {
-		$mOneMark = $bucket['oneMark'];
-		$mTwoMark = $bucket['twoMark'];
+		$topics = $bucket['topics'];
 		$mCatId = $bucket['categoryid'];
-		$mAllIds = array_merge($mOneMark, $mTwoMark);
-		if (empty($mAllIds)) continue;
+		if (empty($topics)) continue;
 
-		$mChunks = array_chunk($mAllIds, $maxPerTest);
+		// Greedily merge adjacent small topics
+		$mergedGroups = [];
+		$currentGroup = ['names' => [], 'oneMark' => [], 'twoMark' => []];
+		foreach ($topics as $t) {
+			$currentGroup['names'][] = $t['name'];
+			$currentGroup['oneMark'] = array_merge($currentGroup['oneMark'], $t['oneMark']);
+			$currentGroup['twoMark'] = array_merge($currentGroup['twoMark'], $t['twoMark']);
+			$total = count($currentGroup['oneMark']) + count($currentGroup['twoMark']);
+			if ($total >= $minTopicQs) {
+				$mergedGroups[] = $currentGroup;
+				$currentGroup = ['names' => [], 'oneMark' => [], 'twoMark' => []];
+			}
+		}
+		// Leftover: merge into last group if exists, otherwise keep as is
+		if (!empty($currentGroup['names'])) {
+			if (!empty($mergedGroups)) {
+				$last = &$mergedGroups[count($mergedGroups) - 1];
+				$last['names'] = array_merge($last['names'], $currentGroup['names']);
+				$last['oneMark'] = array_merge($last['oneMark'], $currentGroup['oneMark']);
+				$last['twoMark'] = array_merge($last['twoMark'], $currentGroup['twoMark']);
+				unset($last);
+			} else {
+				$mergedGroups[] = $currentGroup;
+			}
+		}
+
 		$mTestNo = 0;
-		foreach ($mChunks as $mChunk) {
-			$mTestNo++;
-			$mChunk1 = array_values(array_intersect($mChunk, $mOneMark));
-			$mChunk2 = array_values(array_intersect($mChunk, $mTwoMark));
-			$mNum1 = count($mChunk1);
-			$mNum2 = count($mChunk2);
-			$mTotalMarks = $mNum1 + 2 * $mNum2;
-			$mTime = $mNum1 + 2 * $mNum2;
-			$mTotalQs = count($mChunk);
+		foreach ($mergedGroups as $mg) {
+			$mOneMark = $mg['oneMark'];
+			$mTwoMark = $mg['twoMark'];
+			$mAllIds = array_merge($mOneMark, $mTwoMark);
+			if (empty($mAllIds)) continue;
 
-			$mTitle = "GATE CSE PYQs | $mSubject | Mixed Topics | Test $mTestNo";
+			$mChunks = array_chunk($mAllIds, $maxPerTest);
+			foreach ($mChunks as $mChunk) {
+				$mTestNo++;
+				$mChunk1 = array_values(array_intersect($mChunk, $mOneMark));
+				$mChunk2 = array_values(array_intersect($mChunk, $mTwoMark));
+				$mNum1 = count($mChunk1);
+				$mNum2 = count($mChunk2);
+				$mTotalMarks = $mNum1 + 2 * $mNum2;
+				$mTime = $mNum1 + 2 * $mNum2;
+				$mTotalQs = count($mChunk);
 
-			$existing = qa_db_read_one_value(qa_db_query_sub(
-				"SELECT postid FROM ^exams WHERE title=$", $mTitle
-			), true);
-			if ($existing) {
-				$log[] = ['action' => 'skip', 'title' => $mTitle, 'reason' => 'exists'];
-				continue;
+				// Use the merged topic names (up to 3, then "& more")
+				$names = $mg['names'];
+				if (count($names) <= 3) {
+					$topicLabel = implode(', ', $names);
+				} else {
+					$topicLabel = implode(', ', array_slice($names, 0, 3)) . ' & more';
+				}
+				$mTitle = "GATE CSE PYQs | $mSubject | $topicLabel | Test $mTestNo";
+
+				$existing = qa_db_read_one_value(qa_db_query_sub(
+					"SELECT postid FROM ^exams WHERE title=$", $mTitle
+				), true);
+				if ($existing) {
+					$log[] = ['action' => 'skip', 'title' => $mTitle, 'reason' => 'exists'];
+					continue;
+				}
+
+				if (!$dryrun) {
+					qa_db_query_sub(
+						"INSERT INTO ^exams (title, created, time_alotted, total_qs, total_marks,
+						 post_ids_apti_1_mark, post_ids_apti_2_mark,
+						 post_ids_technical_1_mark, post_ids_technical_2_mark,
+						 penalty_aptitude, penalty_technical, num_options, shuffle,
+						 categoryid, userid, type)
+						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E')",
+						$mTitle, $mTime, $mTotalQs, $mTotalMarks,
+						implode(',', $mChunk1), implode(',', $mChunk2),
+						$mCatId, $userid
+					);
+				}
+				$log[] = ['action' => $dryrun ? 'would_create' : 'created', 'title' => $mTitle,
+				          'qs' => $mTotalQs, 'marks' => $mTotalMarks, 'time' => $mTime];
+				$created++;
 			}
-
-			if (!$dryrun) {
-				qa_db_query_sub(
-					"INSERT INTO ^exams (title, created, time_alotted, total_qs, total_marks,
-					 post_ids_apti_1_mark, post_ids_apti_2_mark,
-					 post_ids_technical_1_mark, post_ids_technical_2_mark,
-					 penalty_aptitude, penalty_technical, num_options, shuffle,
-					 categoryid, userid, type)
-					 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E')",
-					$mTitle, $mTime, $mTotalQs, $mTotalMarks,
-					implode(',', $mChunk1), implode(',', $mChunk2),
-					$mCatId, $userid
-				);
-			}
-			$log[] = ['action' => $dryrun ? 'would_create' : 'created', 'title' => $mTitle,
-			          'qs' => $mTotalQs, 'marks' => $mTotalMarks, 'time' => $mTime];
-			$created++;
 		}
 	}
 
@@ -471,7 +512,7 @@ function qa_book_plugin_createBook($return=false) {
         $maxPerTest = (int)(qa_get('max') ?: 15);
         if ($maxPerTest < 1) $maxPerTest = 15;
         $dryrun = (bool)qa_get('dryrun');
-        $minTopicQs = qa_get('merge-single') ? max(2, (int)(qa_get('min-topic') ?: 2)) : 0;
+        $minTopicQs = max(5, (int)(qa_get('min-topic') ?: 5));
 
         if ($volume && isset($volumeMap[(int)$volume])) {
             $filterCatIds = $volumeMap[(int)$volume];
