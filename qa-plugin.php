@@ -207,24 +207,48 @@ function qa_book_set($key, $value, $prefix = null) {
  *   catid=2,12,15              — limit to specific category IDs (comma-separated)
  *   max=20                     — max questions per test (default 15)
  *   dryrun=1                   — preview only, don't create
- *   delete=1                   — delete all existing GATE CSE PYQs topic exams
- *   merge-single=1             — merge small topics into "Mixed Topics" tests
- *   min-topic=N                — topics with fewer than N questions get merged (default 2)
+ *   delete=1                   — delete all existing topic exams for given examcat
+ *   min-topic=N                — topics with fewer than N questions get merged (default 5)
+ *   examcat=slug               — exam category slug: gate, isro, tifr, ugcnet (default gate)
  *
  * Volume mapping:
  *   1 = Engineering Mathematics + General Aptitude (13,26,27,28,29,30,31,32,33,35,112,113)
  *   2 = CS Technical subjects (2,12,14,18,36,37,15,16,17,19,22)
  *   3 = CO, OS, DB, Networks, Digital Logic (15,16,17,19,22)
  */
-function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryrun = false, $minTopicQs = 0) {
+function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryrun = false, $minTopicQs = 0, $examCatSlug = 'gate') {
 	$excludeTags = ['descriptive', 'proof', 'true-false', 'match-the-following'];
 	$userid = 1;
 	$created = 0;
 	$log = [];
-	$mergeBuckets = []; // subject => ['oneMark' => [], 'twoMark' => [], 'categoryid' => N]
+	$mergeBuckets = [];
 
-	// GATE CSE subject category IDs (parents)
-	$gateSubjectIds = [2, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25];
+	// Slug-based config: categoryslug => [title prefix, tag filter, subject category IDs]
+	$slugConfig = [
+		'gate'   => ['prefix' => 'GATE CSE PYQs', 'tagfilter' => 'gate', 'subjectIds' => [2, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25]],
+		'isro'   => ['prefix' => 'ISRO PYQs',     'tagfilter' => 'isro', 'subjectIds' => [2, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25]],
+		'tifr'   => ['prefix' => 'TIFR PYQs',     'tagfilter' => 'tifr', 'subjectIds' => [2, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25]],
+		'ugcnet' => ['prefix' => 'UGC NET PYQs',  'tagfilter' => 'ugcnet', 'subjectIds' => [2, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25]],
+	];
+
+	$examCatSlug = strtolower(trim($examCatSlug));
+	if (!isset($slugConfig[$examCatSlug])) {
+		return ['created' => 0, 'log' => [['action' => 'error', 'title' => "Unknown exam category slug: $examCatSlug"]]];
+	}
+
+	// Look up the actual categoryid from the examcategories table
+	$examCatId = qa_db_read_one_value(qa_db_query_sub(
+		"SELECT categoryid FROM ^examcategories WHERE categoryslug=$", $examCatSlug
+	), true);
+	if (!$examCatId) {
+		return ['created' => 0, 'log' => [['action' => 'error', 'title' => "Exam category '$examCatSlug' not found in examcategories table"]]];
+	}
+	$examCatId = (int)$examCatId;
+
+	$config = $slugConfig[$examCatSlug];
+	$titlePrefix = $config['prefix'];
+	$tagFilter = $config['tagfilter'];
+	$gateSubjectIds = $config['subjectIds'];
 
 	// Get all categories and their parent info
 	$allCats = qa_db_read_all_assoc(qa_db_query_sub(
@@ -350,7 +374,7 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 				$timeAllotted = $num1 + 2 * $num2; // minutes
 				$totalQs = count($chunk);
 
-				$title = "GATE CSE PYQs | $subject | $topicName | Test $testNo";
+				$title = "$titlePrefix | $subject | $topicName | Test $testNo";
 
 				// Check if exam with this title already exists
 				$existing = qa_db_read_one_value(qa_db_query_sub(
@@ -375,7 +399,7 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 						$totalMarks,
 						implode(',', array_values($chunk1)),
 						implode(',', array_values($chunk2)),
-						$categoryid,
+						$examCatId,
 						$userid
 					);
 				}
@@ -444,7 +468,7 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 				} else {
 					$topicLabel = implode(', ', array_slice($names, 0, 3)) . ' & more';
 				}
-				$mTitle = "GATE CSE PYQs | $mSubject | $topicLabel | Test $mTestNo";
+				$mTitle = "$titlePrefix | $mSubject | $topicLabel | Test $mTestNo";
 
 				$existing = qa_db_read_one_value(qa_db_query_sub(
 					"SELECT postid FROM ^exams WHERE title=$", $mTitle
@@ -464,7 +488,7 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 						 VALUES ($, NOW(), #, #, #, '', '', $, $, 0, 0, 4, 1, #, #, 'E')",
 						$mTitle, $mTime, $mTotalQs, $mTotalMarks,
 						implode(',', $mChunk1), implode(',', $mChunk2),
-						$mCatId, $userid
+						$examCatId, $userid
 					);
 				}
 				$log[] = ['action' => $dryrun ? 'would_create' : 'created', 'title' => $mTitle,
@@ -496,10 +520,13 @@ function qa_book_plugin_createBook($return=false) {
 
         // Handle delete
         if (qa_get('delete')) {
+            $examCatSlug = qa_get('examcat') ?: 'gate';
+            $prefixMap = ['gate' => 'GATE CSE PYQs', 'isro' => 'ISRO PYQs', 'tifr' => 'TIFR PYQs', 'ugcnet' => 'UGC NET PYQs'];
+            $delPrefix = $prefixMap[$examCatSlug] ?? 'GATE CSE PYQs';
             $deleted = qa_db_read_one_value(qa_db_query_sub(
-                "SELECT COUNT(*) FROM ^exams WHERE title LIKE 'GATE CSE PYQs |%'"
+                "SELECT COUNT(*) FROM ^exams WHERE title LIKE $", $delPrefix . ' |%'
             ), true);
-            qa_db_query_sub("DELETE FROM ^exams WHERE title LIKE 'GATE CSE PYQs |%'");
+            qa_db_query_sub("DELETE FROM ^exams WHERE title LIKE $", $delPrefix . ' |%');
             echo "<h2>Deleted $deleted topic exams.</h2>";
             echo '<p><a href="' . qa_path('book', ['make_topic_exam' => 1]) . '">Back to Topic Exam Creator</a></p>';
             return "Deleted $deleted topic exams.";
@@ -520,7 +547,9 @@ function qa_book_plugin_createBook($return=false) {
             $filterCatIds = array_map('intval', explode(',', $catidParam));
         }
 
-        $result = qa_book_make_topic_exams($filterCatIds, $maxPerTest, $dryrun, $minTopicQs);
+        $examCatSlug = qa_get('examcat') ?: 'gate';
+
+        $result = qa_book_make_topic_exams($filterCatIds, $maxPerTest, $dryrun, $minTopicQs, $examCatSlug);
 
         // Render output
         $action = $dryrun ? 'Would create' : 'Created';
@@ -565,16 +594,19 @@ function qa_book_plugin_createBook($return=false) {
         $baseUrl = qa_path('book', ['make_topic_exam' => 1]);
         $html .= '<h3>URL Controls</h3><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:8px 0;font-size:14px">';
         $html .= '<tr><th>Action</th><th>URL</th></tr>';
-        $html .= '<tr><td>Dry run (all)</td><td><a href="' . $baseUrl . '&dryrun=1">' . $baseUrl . '&amp;dryrun=1</a></td></tr>';
-        $html .= '<tr><td>Create all</td><td><a href="' . $baseUrl . '">' . $baseUrl . '</a></td></tr>';
+        $html .= '<tr><td>Dry run (GATE)</td><td><a href="' . $baseUrl . '&dryrun=1">&amp;dryrun=1</a></td></tr>';
+        $html .= '<tr><td>Create all (GATE)</td><td><a href="' . $baseUrl . '">' . $baseUrl . '</a></td></tr>';
+        $html .= '<tr><td>ISRO topic exams</td><td><a href="' . $baseUrl . '&examcat=isro&dryrun=1">&amp;examcat=isro&amp;dryrun=1</a></td></tr>';
+        $html .= '<tr><td>TIFR topic exams</td><td><a href="' . $baseUrl . '&examcat=tifr&dryrun=1">&amp;examcat=tifr&amp;dryrun=1</a></td></tr>';
+        $html .= '<tr><td>UGC NET topic exams</td><td><a href="' . $baseUrl . '&examcat=ugcnet&dryrun=1">&amp;examcat=ugcnet&amp;dryrun=1</a></td></tr>';
         $html .= '<tr><td>Volume 1 (Math + Aptitude)</td><td><a href="' . $baseUrl . '&volume=1&dryrun=1">&amp;volume=1</a></td></tr>';
         $html .= '<tr><td>Volume 2 (CS Technical)</td><td><a href="' . $baseUrl . '&volume=2&dryrun=1">&amp;volume=2</a></td></tr>';
         $html .= '<tr><td>Volume 3 (CO,OS,DB,Net,DL)</td><td><a href="' . $baseUrl . '&volume=3&dryrun=1">&amp;volume=3</a></td></tr>';
         $html .= '<tr><td>Specific categories</td><td>' . $baseUrl . '&amp;catid=2,12,15&amp;dryrun=1</td></tr>';
         $html .= '<tr><td>Custom max per test</td><td>' . $baseUrl . '&amp;max=20</td></tr>';
-        $html .= '<tr><td>Merge small topics</td><td><a href="' . $baseUrl . '&merge-single=1&dryrun=1">&amp;merge-single=1</a></td></tr>';
-        $html .= '<tr><td>Merge topics &lt; N questions</td><td>' . $baseUrl . '&amp;merge-single=1&amp;min-topic=3</td></tr>';
-        $html .= '<tr><td>Delete all topic exams</td><td><a href="' . $baseUrl . '&delete=1" onclick="return confirm(\'Delete all GATE CSE PYQs topic exams?\')">&amp;delete=1</a></td></tr>';
+        $html .= '<tr><td>Min topic questions</td><td>' . $baseUrl . '&amp;min-topic=5</td></tr>';
+        $html .= '<tr><td>Delete GATE topic exams</td><td><a href="' . $baseUrl . '&delete=1" onclick="return confirm(\'Delete all GATE topic exams?\')">&amp;delete=1</a></td></tr>';
+        $html .= '<tr><td>Delete ISRO topic exams</td><td><a href="' . $baseUrl . '&examcat=isro&delete=1" onclick="return confirm(\'Delete all ISRO topic exams?\')">&amp;examcat=isro&amp;delete=1</a></td></tr>';
         $html .= '<tr><td>View topic exams index</td><td><a href="' . qa_path('topic-exams') . '">/topic-exams</a></td></tr>';
         $html .= '</table>';
 

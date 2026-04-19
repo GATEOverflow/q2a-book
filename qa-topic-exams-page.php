@@ -160,31 +160,33 @@ class qa_topic_exams_page
 		// CSS
 		$css = '
 <style>
-.te-summary{display:flex;gap:20px;flex-wrap:wrap;padding:16px 20px;background:#f0f4ff;border-radius:12px;margin-bottom:20px}
-.te-stat{font-size:15px;color:#475569}
-.te-stat strong{font-size:22px;color:#1e40af;display:block}
-.te-nav{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin-bottom:20px;border-bottom:1px solid #e2e8f0}
-.te-nav-link{display:inline-block;padding:6px 14px;background:#f1f5f9;border-radius:8px;color:#334155;text-decoration:none;font-size:14px;font-weight:500;transition:all .15s}
+.te-summary{display:flex;gap:20px;flex-wrap:wrap;padding:16px 20px;background:var(--te-summary-bg,#f0f4ff);border-radius:12px;margin-bottom:20px}
+.te-stat{font-size:15px;color:var(--te-text-muted,#475569)}
+.te-stat strong{font-size:22px;color:var(--te-accent,#1e40af);display:block}
+.te-nav{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin-bottom:20px;border-bottom:1px solid var(--te-border,#e2e8f0)}
+.te-nav-link{display:inline-block;padding:6px 14px;background:var(--te-nav-bg,#f1f5f9);border-radius:8px;color:var(--te-text,#334155);text-decoration:none;font-size:14px;font-weight:500;transition:all .15s}
 .te-nav-link:hover{background:#2563eb;color:#fff}
-.te-nav-count{color:#94a3b8;font-weight:400}
+.te-nav-count{color:var(--te-text-muted,#94a3b8);font-weight:400}
 .te-nav-link:hover .te-nav-count{color:#bfdbfe}
 .te-subject{margin-bottom:32px}
-.te-subject-title{font-size:22px;font-weight:700;color:#1e293b;padding-bottom:8px;border-bottom:3px solid #2563eb;margin-bottom:16px}
-.te-subject-meta{font-size:14px;font-weight:400;color:#64748b;margin-left:8px}
+.te-subject-title{font-size:22px;font-weight:700;color:var(--te-text-heading,#1e293b);padding-bottom:8px;border-bottom:3px solid #2563eb;margin-bottom:16px}
+.te-subject-meta{font-size:14px;font-weight:400;color:var(--te-text-muted,#64748b);margin-left:8px}
 .te-topics{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
-.te-topic{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;transition:box-shadow .15s}
-.te-topic:hover{box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.te-topic{background:var(--te-card-bg,#fff);border:1px solid var(--te-border,#e2e8f0);border-radius:10px;padding:14px 16px;transition:box-shadow .15s}
+.te-topic:hover{box-shadow:0 2px 12px var(--te-shadow,rgba(0,0,0,.06))}
 .te-topic-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.te-topic-name{font-size:16px;font-weight:600;color:#1e293b}
-.te-topic-meta{font-size:13px;color:#64748b;background:#f1f5f9;padding:2px 8px;border-radius:6px}
+.te-topic-name{font-size:16px;font-weight:600;color:var(--te-text-heading,#1e293b)}
+.te-topic-meta{font-size:13px;color:var(--te-text-muted,#64748b);background:var(--te-nav-bg,#f1f5f9);padding:2px 8px;border-radius:6px}
 .te-tests{display:flex;flex-wrap:wrap;gap:6px}
-.te-test-link{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;font-size:13px;color:#334155;transition:all .15s}
+.te-test-link{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:var(--te-test-bg,#f8fafc);border:1px solid var(--te-border,#e2e8f0);border-radius:6px;text-decoration:none;font-size:13px;color:var(--te-text,#334155);transition:all .15s}
 .te-test-link:hover{background:#2563eb;color:#fff;border-color:#2563eb}
 .te-test-link:hover .te-test-info,.te-test-link:hover .te-test-taken{color:#bfdbfe}
 .te-test-name{font-weight:600}
-.te-test-info{color:#64748b;font-size:12px}
+.te-test-info{color:var(--te-text-muted,#64748b);font-size:12px}
 .te-test-taken{color:#16a34a;font-size:11px;font-weight:500}
 @media(max-width:640px){.te-topics{grid-template-columns:1fr}.te-summary{gap:12px}.te-stat strong{font-size:18px}}
+html:not([data-theme="light"]){--te-summary-bg:#1e293b;--te-text-muted:#94a3b8;--te-accent:#60a5fa;--te-border:#334155;--te-nav-bg:#1e293b;--te-text:#cbd5e1;--te-text-heading:#f1f5f9;--te-card-bg:#0f172a;--te-shadow:rgba(0,0,0,.3);--te-test-bg:#1e293b}
+html:not([data-theme="light"]) .qa-part-custom{background-color:transparent!important}
 </style>';
 
 		$qa_content['custom'] = $css . $html;
