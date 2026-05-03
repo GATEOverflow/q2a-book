@@ -13,6 +13,7 @@ qa_register_plugin_overrides('qa-book-overrides.php');
 qa_register_plugin_module('widget', 'qa-book-widget.php', 'qa_book_widget', 'Book Widget');
 
 qa_register_plugin_module('page', 'qa-topic-exams-page.php', 'qa_topic_exams_page', 'Topic Exams Index');
+qa_register_plugin_module('page', 'qa-book-suggested-tags-page.php', 'qa_book_suggested_tags_page', 'Suggested Tags Page');
 
 qa_register_plugin_phrases('qa-book-lang-*.php', 'book');
 
@@ -501,6 +502,281 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 	return ['created' => $created, 'log' => $log];
 }
 
+/**
+ * Generate mintag-based tag suggestions using Gemini API validation.
+ *
+ * Logic:
+ * 1. For each category, find each question's mintag (least-used non-special tag).
+ * 2. For each question Q with mintag M, look at other questions that also have tag M
+ *    but whose mintag is a DIFFERENT tag T.
+ * 3. If Q doesn't already have tag T, ask Gemini if T is relevant to Q's title/content.
+ * 4. If Gemini says yes, store T as a suggestion for Q.
+ *
+ * @param array|null $filterCatIds Limit to specific category IDs
+ * @param bool $dryrun If true, don't store — just return what would be suggested
+ * @param int $maxPerRun Maximum suggestions to generate per run (to limit API calls)
+ * @param string $tagFilter Required tag filter (e.g. 'gate') — only questions with this tag are considered
+ * @param string $customFilter Additional SQL WHERE clause (from book_plugin_custom_filter)
+ * @return array ['count' => int, 'log' => array]
+ */
+function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false, $maxPerRun = 50, $tagFilter = 'gate', $customFilter = '') {
+    set_time_limit(300);
+    $log = [];
+    $count = 0;
+    $startTime = time();
+    $apiKey = qa_opt('openai_gemini_api_key');
+
+    if (empty($apiKey)) {
+        return ['count' => 0, 'log' => [['postid' => 0, 'title' => 'ERROR', 'tags' => '', 'suggested' => '', 'reason' => 'Gemini API key not configured (openai_gemini_api_key)']]];
+    }
+
+    // Get book categories
+    $cats = [];
+    qa_book_getallcats($cats);
+
+    // Build tag filter SQL
+    $tagFilterSql = '';
+    if (!empty($tagFilter)) {
+        $tagFilterSql = " AND qs.tags LIKE '%" . qa_db_escape_string($tagFilter) . "%'";
+    }
+
+    // Build custom filter SQL (same as book generation filters)
+    $customFilterSql = '';
+    if (!empty($customFilter)) {
+        $customFilterSql = " AND (" . $customFilter . ")";
+    }
+
+    foreach ($cats as $cat) {
+        $categoryid = (int) $cat['categoryid'];
+        if ($filterCatIds !== null && !in_array($categoryid, $filterCatIds)) continue;
+        if ($count >= $maxPerRun || (time() - $startTime) > 120) break;
+
+        // Load questions in this category (with content) — same filters as book generation
+        $questions = qa_db_read_all_assoc(qa_db_query_sub(
+            "SELECT qs.postid, BINARY qs.title AS title, qs.tags, qs.content
+             FROM ^posts qs
+             WHERE qs.type='Q' AND qs.closedbyid IS NULL AND qs.categoryid=#
+               AND qs.tags NOT LIKE '%usermod%'
+               AND qs.tags NOT LIKE '%usergate%'
+               AND qs.tags NOT LIKE '%memorybased%'
+               AND qs.tags NOT LIKE '%goclasses%'" . $tagFilterSql . $customFilterSql . "
+             ORDER BY qs.netvotes DESC, qs.created ASC",
+            $categoryid
+        ));
+
+        if (count($questions) < 3) continue;
+
+        // Build mintag index: collect all valid mintags used in this category
+        $allMintags = []; // mintag_slug => count of questions using it
+        $questionData = [];
+        $tagToQuestions = [];
+
+        foreach ($questions as $q) {
+            $qid = (int) $q['postid'];
+            $mt = trim(mintag($q));
+            $mtSlug = strtolower(str_replace(' ', '-', $mt));
+            $allTags = array_filter(array_map('trim', explode(',', (string) $q['tags'])));
+
+            $questionData[$qid] = [
+                'title' => $q['title'],
+                'content' => strip_tags((string) $q['content']),
+                'tags' => $allTags,
+                'mintag_slug' => $mtSlug,
+            ];
+
+            if ($mtSlug !== '') {
+                $allMintags[$mtSlug] = ($allMintags[$mtSlug] ?? 0) + 1;
+            }
+
+            foreach ($allTags as $tag) {
+                if (!ignoredtags($tag)) {
+                    $tagToQuestions[$tag][] = $qid;
+                }
+            }
+        }
+
+        // Only consider mintags used by at least 2 questions as valid topics
+        $validMintags = array_keys(array_filter($allMintags, function($c) { return $c >= 2; }));
+        if (empty($validMintags)) continue;
+
+        // For each question, find candidate mintags it doesn't already have
+        // A candidate is a valid mintag that appears on sibling questions (sharing at least one tag)
+        $candidates = [];
+
+        foreach ($questionData as $qid => $qdata) {
+            if ($count + count($candidates) >= $maxPerRun * 2) break;
+            if ((time() - $startTime) > 100) break;
+
+            $myMintag = $qdata['mintag_slug'];
+            if ($myMintag === '') continue;
+
+            // Find candidate mintags: valid mintags that Q doesn't already have
+            // AND that appear as the mintag for questions sharing at least one non-special tag with Q
+            $candidateMintags = [];
+            $sharedQids = $tagToQuestions[$myMintag] ?? [];
+
+            foreach ($sharedQids as $otherId) {
+                if ($otherId === $qid) continue;
+                $otherMintag = $questionData[$otherId]['mintag_slug'];
+                if ($otherMintag === '' || $otherMintag === $myMintag) continue;
+                if (in_array($otherMintag, $qdata['tags'])) continue;
+                if (ignoredtags($otherMintag)) continue;
+                if (!in_array($otherMintag, $validMintags)) continue;
+                $candidateMintags[$otherMintag] = true;
+            }
+
+            if (empty($candidateMintags)) continue;
+            $candidateList = array_keys($candidateMintags);
+
+            // Check if suggestions already exist for this question
+            $existingTags = qa_db_read_all_values(qa_db_query_sub(
+                "SELECT suggested_tags FROM ^tag_suggestions WHERE postid=# AND status IS NULL",
+                $qid
+            ));
+            $candidateList = array_diff($candidateList, $existingTags);
+            if (empty($candidateList)) continue;
+
+            $candidates[] = [
+                'qid' => $qid,
+                'title' => $qdata['title'],
+                'content' => mb_substr($qdata['content'], 0, 1000),
+                'tags' => implode(',', $qdata['tags']),
+                'candidate_tags' => array_values($candidateList),
+            ];
+        }
+
+        // Send candidates to Gemini in batches of 5 (each has full text + multiple candidates)
+        $batches = array_chunk($candidates, 5);
+        foreach ($batches as $batch) {
+            if ($count >= $maxPerRun) break 2;
+            if ((time() - $startTime) > 120) break 2;
+
+            $geminiResult = qa_book_verify_tags_gemini($apiKey, $batch);
+
+            foreach ($batch as $idx => $item) {
+                if ($count >= $maxPerRun) break;
+
+                $approvedTags = $geminiResult[$idx] ?? [];
+
+                foreach ($approvedTags as $approvedTag) {
+                    if ($count >= $maxPerRun) break;
+
+                    if (!$dryrun) {
+                        qa_db_query_sub(
+                            "INSERT INTO ^tag_suggestions (postid, suggested_tags, created) VALUES (#, $, NOW())",
+                            $item['qid'], $approvedTag
+                        );
+                    }
+                    $count++;
+                    $log[] = [
+                        'postid' => $item['qid'],
+                        'title' => $item['title'],
+                        'tags' => $item['tags'],
+                        'suggested' => $approvedTag,
+                        'reason' => 'Gemini approved based on question content.',
+                    ];
+                }
+
+                // Log rejected ones too
+                $rejected = array_diff($item['candidate_tags'], $approvedTags);
+                foreach ($rejected as $rejTag) {
+                    $log[] = [
+                        'postid' => $item['qid'],
+                        'title' => $item['title'],
+                        'tags' => $item['tags'],
+                        'suggested' => $rejTag,
+                        'reason' => 'Gemini rejected.',
+                    ];
+                }
+            }
+        }
+    }
+
+    return ['count' => $count, 'log' => $log];
+}
+
+/**
+ * Call Gemini API to verify which candidate tags are relevant for given questions.
+ * Sends full question text and a list of possible tags; Gemini decides purely on content.
+ *
+ * @param string $apiKey Gemini API key
+ * @param array $batch Array of items with 'title', 'content', 'tags', 'candidate_tags'
+ * @return array Indexed array of arrays (approved tag lists per question)
+ */
+function qa_book_verify_tags_gemini($apiKey, $batch) {
+    $questions = [];
+    foreach ($batch as $idx => $item) {
+        $questions[] = [
+            'index' => $idx,
+            'title' => $item['title'],
+            'question_text' => $item['content'],
+            'current_tags' => $item['tags'],
+            'candidate_tags' => $item['candidate_tags'],
+        ];
+    }
+
+    $prompt = "You are a strict computer science subject expert reviewing tag assignments for exam questions.\n\n"
+        . "For each question below, you are given the question title, full text, current tags, and a list of candidate_tags (subtopic names).\n\n"
+        . "For each candidate tag, determine if it DIRECTLY and SPECIFICALLY describes a subtopic tested by this question.\n"
+        . "Rules:\n"
+        . "- A tag is relevant ONLY if the question explicitly tests knowledge of that specific subtopic.\n"
+        . "- Do NOT approve a tag just because it is vaguely related or from the same broad subject area.\n"
+        . "- The question content must clearly demonstrate that solving it requires understanding the candidate subtopic.\n"
+        . "- If unsure, reject the tag.\n\n"
+        . "Questions:\n" . json_encode($questions, JSON_PRETTY_PRINT) . "\n\n"
+        . "Respond with a JSON array: [{\"index\": 0, \"approved_tags\": [\"tag1\"]}, ...]\n"
+        . "If no candidate tags are relevant for a question, return an empty approved_tags array.\n"
+        . "Only return the JSON array, nothing else.";
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode($apiKey);
+    $data = [
+        'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+        'generationConfig' => [
+            'temperature' => 0.1,
+            'maxOutputTokens' => 2000,
+            'responseMimeType' => 'application/json',
+        ],
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    // Default: empty approved list for each
+    $results = array_fill(0, count($batch), []);
+
+    if ($httpCode !== 200 || empty($response)) {
+        return $results;
+    }
+
+    $decoded = json_decode($response, true);
+    $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+    $parsed = json_decode($text, true);
+    if (is_array($parsed)) {
+        foreach ($parsed as $item) {
+            $idx = $item['index'] ?? null;
+            if ($idx !== null && isset($results[$idx]) && is_array($item['approved_tags'] ?? null)) {
+                // Only accept tags that were actually in the candidate list
+                $validApproved = array_intersect($item['approved_tags'], $batch[$idx]['candidate_tags']);
+                $results[$idx] = array_values($validApproved);
+            }
+        }
+    }
+
+    return $results;
+}
+
 function qa_book_plugin_createBook($return=false) {
     set_time_limit(600); // book generation can be slow
 
@@ -612,6 +888,74 @@ function qa_book_plugin_createBook($return=false) {
 
         echo $html;
         return "$action {$result['created']} topic exams.";
+    }
+
+    // Handle suggest_tags request: generate mintag-based suggestions and store in DB
+    if (qa_get('suggest_tags')) {
+        $isCron = (qa_get('cron') === 'true');
+        if (!$isCron && (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN)) {
+            echo '<h2>Admin access required.</h2>';
+            return 'Access denied.';
+        }
+
+        $dryrun = (bool) qa_get('dryrun');
+        $catidParam = qa_get('catid');
+        $filterCatIds = $catidParam ? array_map('intval', explode(',', $catidParam)) : null;
+        $maxPerRun = (int) (qa_get('max') ?: 50);
+        if ($maxPerRun < 1) $maxPerRun = 50;
+        $tagFilter = qa_get('tag') ?: 'gate';
+
+        // Apply the same custom filters as book generation (filter1, filter2, etc.)
+        $customFilter = '';
+        for ($i = 1; $i <= 10; $i++) {
+            if (qa_get('filter' . $i)) {
+                $f = qa_book_get('book_plugin_custom_filter' . $i);
+                if (!empty(trim($f))) {
+                    $customFilter .= ($customFilter ? ' AND ' : '') . '(' . $f . ')';
+                }
+            }
+        }
+
+        // Apply volume-based category restriction
+        $volumeMap = [
+            1 => [13, 26, 27, 28, 29, 30, 31, 32, 33, 35, 112, 113],
+            2 => [2, 12, 14, 18, 36, 37, 15, 16, 17, 19, 22],
+            3 => [15, 16, 17, 19, 22],
+        ];
+        $volume = (int) qa_get('volume');
+        if ($volume && isset($volumeMap[$volume]) && !$filterCatIds) {
+            $filterCatIds = $volumeMap[$volume];
+        }
+
+        $result = qa_book_generate_tag_suggestions($filterCatIds, $dryrun, $maxPerRun, $tagFilter, $customFilter);
+
+        $html = '<h2>' . ($dryrun ? 'Dry run: would generate' : 'Generated') . ' ' . $result['count'] . ' tag suggestions</h2>';
+        if ($dryrun) {
+            $html .= '<p><em>Dry run — nothing stored.</em> <a href="' . qa_path('book', array('suggest_tags' => 1) + ($catidParam ? array('catid' => $catidParam) : array())) . '">Run for real</a></p>';
+        }
+
+        $html .= '<table style="border-collapse:collapse; width:100%; font-size:13px; margin-top:12px;">';
+        $html .= '<tr style="background:#f5f5f5;"><th style="padding:6px;">Question</th><th style="padding:6px;">Current Tags</th><th style="padding:6px;">Suggested Tag</th><th style="padding:6px;">Reason</th></tr>';
+        foreach (array_slice($result['log'], 0, 200) as $entry) {
+            $html .= '<tr style="border-bottom:1px solid #eee;">';
+            $html .= '<td style="padding:6px;"><a href="/' . (int)$entry['postid'] . '" target="_blank">' . qa_html($entry['title']) . '</a></td>';
+            $html .= '<td style="padding:6px; font-size:11px;">' . qa_html($entry['tags']) . '</td>';
+            $html .= '<td style="padding:6px;"><b>' . qa_html($entry['suggested']) . '</b></td>';
+            $html .= '<td style="padding:6px; font-size:11px;">' . qa_html($entry['reason']) . '</td>';
+            $html .= '</tr>';
+        }
+        $html .= '</table>';
+
+        $baseUrl = qa_path('book', array('suggest_tags' => 1, 'dryrun' => 1));
+        $html .= '<h3 style="margin-top:20px;">Usage</h3><table style="font-size:13px;">';
+        $html .= '<tr><td>Dry run (all cats)</td><td><a href="' . $baseUrl . '">' . $baseUrl . '</a></td></tr>';
+        $html .= '<tr><td>Specific categories</td><td>' . qa_path('book', array('suggest_tags' => 1, 'catid' => '2,12,15', 'dryrun' => 1)) . '</td></tr>';
+        $html .= '<tr><td>Run for real</td><td><a href="' . qa_path('book', array('suggest_tags' => 1)) . '">suggest_tags=1 (no dryrun)</a></td></tr>';
+        $html .= '<tr><td>Review suggestions</td><td><a href="' . qa_path('admin/book-suggested-tags') . '">admin/book-suggested-tags</a></td></tr>';
+        $html .= '</table>';
+
+        echo $html;
+        return ($dryrun ? 'Would generate' : 'Generated') . ' ' . $result['count'] . ' tag suggestions.';
     }
 
     $globalquestioncount = 0;
