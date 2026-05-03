@@ -687,7 +687,7 @@ if($volume)
             $catinc = " and qs.categoryid in (13,26,27,28,29,30,31,32,33,35,112,113)";break;
             //$catinc = " and qs.categoryid in (118)";break;
             //$catinc = " and qs.categoryid in (30)";break;
-            qa_book_set('extra_filter_tags', '');
+            qa_book_set('extra_filter_tags', 'onto');
         case 2:
             $catinc = " and qs.categoryid in (2,12,14,18,36,37,118)";break;
             //$catinc = " and qs.categoryid in (2,12,14,18,36,37,15,16,17,19,22,118)";
