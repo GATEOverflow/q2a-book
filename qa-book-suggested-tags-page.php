@@ -66,6 +66,58 @@ class qa_book_suggested_tags_page
 			}
 		}
 
+		// Handle "add to extra filter tags" action
+		if (qa_clicked('add_to_filter')) {
+			$ok = qa_check_form_security_code('book-suggested-tags', qa_post_text('code'));
+			if (!$ok) {
+				$messageHtml = $this->msg('Security check failed. Please retry.', 'error');
+			} else {
+				$suggestionId = (int) qa_post_text('suggestion_id');
+				$tagToFilter = trim((string) qa_post_text('filter_tag'));
+				if ($tagToFilter !== '') {
+					// Add to all volumes' extra filter tags
+					for ($v = 1; $v <= 4; $v++) {
+						$current = qa_book_get('extra_filter_tags_vol' . $v);
+						$tags = array_filter(array_map('trim', explode(',', (string) $current)));
+						if (!in_array($tagToFilter, $tags)) {
+							$tags[] = $tagToFilter;
+							qa_book_set('extra_filter_tags_vol' . $v, implode(',', $tags));
+						}
+					}
+					// Reject this suggestion and all others suggesting this same tag
+					qa_db_query_sub("UPDATE ^tag_suggestions SET status='rejected' WHERE suggested_tags=$ AND status IS NULL", $tagToFilter);
+					$messageHtml = $this->msg('Tag "' . qa_html($tagToFilter) . '" added to extra filter tags (all volumes) and all suggestions for it rejected.', 'success');
+				}
+			}
+		}
+
+		// Handle "remove tag from owner" action
+		if (qa_clicked('remove_from_owner')) {
+			$ok = qa_check_form_security_code('book-suggested-tags', qa_post_text('code'));
+			if (!$ok) {
+				$messageHtml = $this->msg('Security check failed. Please retry.', 'error');
+			} else {
+				$suggestionId = (int) qa_post_text('suggestion_id');
+				$ownerPostId = (int) qa_post_text('owner_postid');
+				$tagToRemove = trim((string) qa_post_text('filter_tag'));
+				if ($ownerPostId > 0 && $tagToRemove !== '') {
+					$post = qa_db_read_one_assoc(qa_db_query_sub(
+						"SELECT postid, tags FROM ^posts WHERE postid=# AND type='Q'", $ownerPostId
+					), true);
+					if ($post) {
+						$existingTags = array_filter(array_map('trim', explode(',', (string) $post['tags'])));
+						$existingTags = array_diff($existingTags, [$tagToRemove]);
+						qa_db_query_sub("UPDATE ^posts SET tags=$ WHERE postid=#", implode(',', $existingTags), $ownerPostId);
+						// Also update word table tag count
+						qa_db_query_sub("UPDATE ^words SET tagcount=GREATEST(0, tagcount-1) WHERE word=$", $tagToRemove);
+					}
+					// Reject all suggestions for this tag
+					qa_db_query_sub("UPDATE ^tag_suggestions SET status='rejected' WHERE suggested_tags=$ AND status IS NULL", $tagToRemove);
+					$messageHtml = $this->msg('Tag "' . qa_html($tagToRemove) . '" removed from owner Q#' . $ownerPostId . ' and suggestions rejected.', 'success');
+				}
+			}
+		}
+
 		$qa_content = qa_content_prepare();
 		$qa_content['title'] = 'Suggested Tags (from DB)';
 
@@ -98,7 +150,7 @@ class qa_book_suggested_tags_page
 		), true);
 
 		$rows = qa_db_read_all_assoc(qa_db_query_sub(
-			"SELECT ts.id, ts.postid, ts.suggested_tags, ts.created,
+			"SELECT ts.id, ts.postid, ts.suggested_tags, ts.source, ts.created,
 			        p.title, p.tags, p.content, p.categoryid, c.title AS category_title
 			 FROM ^tag_suggestions ts
 			 JOIN ^posts p ON ts.postid = p.postid
@@ -144,12 +196,30 @@ class qa_book_suggested_tags_page
 		$tableHtml .= '<th style="padding:8px; text-align:left;">Question</th>';
 		$tableHtml .= '<th style="padding:8px; text-align:left;">Current Tags</th>';
 		$tableHtml .= '<th style="padding:8px; text-align:left;">Suggested Tags</th>';
+		$tableHtml .= '<th style="padding:8px; text-align:left;">Owner</th>';
 		$tableHtml .= '<th style="padding:8px; text-align:left;">Date</th>';
 		$tableHtml .= '<th style="padding:8px; text-align:left;">Action</th>';
 		$tableHtml .= '</tr></thead><tbody>';
 
 		if (empty($rows)) {
-			$tableHtml .= '<tr><td colspan="6" style="padding:20px; text-align:center; color:#888;">No pending tag suggestions.</td></tr>';
+			$tableHtml .= '<tr><td colspan="7" style="padding:20px; text-align:center; color:#888;">No pending tag suggestions.</td></tr>';
+		}
+
+		// Pre-load owner question titles for singleton suggestions
+		$ownerIds = [];
+		foreach ($rows as $row) {
+			if (!empty($row['source']) && preg_match('/owner:(\d+)/', $row['source'], $m)) {
+				$ownerIds[(int)$m[1]] = true;
+			}
+		}
+		$ownerTitles = [];
+		if (!empty($ownerIds)) {
+			$ownerRows = qa_db_read_all_assoc(qa_db_query_sub(
+				"SELECT postid, CAST(title AS CHAR) AS title FROM ^posts WHERE postid IN (" . implode(',', array_keys($ownerIds)) . ")"
+			));
+			foreach ($ownerRows as $or) {
+				$ownerTitles[(int)$or['postid']] = $or['title'];
+			}
 		}
 
 		foreach ($rows as $row) {
@@ -182,16 +252,35 @@ class qa_book_suggested_tags_page
 			$tableHtml .= '<td style="padding:8px;"><a href="' . $questionUrl . '" target="_blank" title="' . $tooltip . '">' . qa_html($row['title']) . '</a></td>';
 			$tableHtml .= '<td style="padding:8px; font-size:12px;">' . $currentTags . '</td>';
 			$tableHtml .= '<td style="padding:8px; font-size:12px;">' . $suggestedTags . $newTagsHtml . '</td>';
+
+			// Owner column
+			$ownerHtml = '-';
+			$ownerPostId = 0;
+			if (!empty($row['source']) && preg_match('/owner:(\d+)/', $row['source'], $m)) {
+				$ownerPostId = (int) $m[1];
+				$ownerTitle = $ownerTitles[$ownerPostId] ?? 'Q#' . $ownerPostId;
+				$ownerUrl = qa_path_html(qa_q_request($ownerPostId, $ownerTitle));
+				$ownerHtml = '<a href="' . $ownerUrl . '" target="_blank" style="font-size:11px;">' . qa_html(mb_substr($ownerTitle, 0, 40)) . '</a>';
+			}
+			$tableHtml .= '<td style="padding:8px; font-size:11px;">' . $ownerHtml . '</td>';
+
 			$tableHtml .= '<td style="padding:8px; font-size:11px; white-space:nowrap;">' . qa_html(substr($row['created'], 0, 10)) . '</td>';
 
-			$actionHtml = '<form method="post" action="' . qa_html(qa_path('admin/book-suggested-tags', array('categoryid' => $selectedCategory, 'per_page' => $perPage, 'page' => $page))) . '" style="margin:0; display:flex; gap:4px;">'
+			$formAction = qa_html(qa_path('admin/book-suggested-tags', array('categoryid' => $selectedCategory, 'per_page' => $perPage, 'page' => $page)));
+			$actionHtml = '<form method="post" action="' . $formAction . '" style="margin:0; display:flex; gap:4px; flex-wrap:wrap;">'
 				. '<input type="hidden" name="code" value="' . qa_html($securityCode) . '">'
 				. '<input type="hidden" name="suggestion_id" value="' . (int) $row['id'] . '">'
 				. '<input type="hidden" name="postid" value="' . (int) $row['postid'] . '">'
 				. '<input type="hidden" name="suggested_tags" value="' . qa_html(implode(',', $filteredSuggested)) . '">'
+				. '<input type="hidden" name="filter_tag" value="' . qa_html($newTags[0]) . '">'
+				. '<input type="hidden" name="owner_postid" value="' . $ownerPostId . '">'
 				. '<button type="submit" name="approve_tag" class="btn-approve">Approve</button>'
 				. '<button type="submit" name="reject_tag" class="btn-reject">Reject</button>'
-				. '</form>';
+				. '<button type="submit" name="add_to_filter" class="btn-filter" title="Add tag to extra_filter_tags for all volumes">+Filter</button>';
+			if ($ownerPostId > 0) {
+				$actionHtml .= '<button type="submit" name="remove_from_owner" class="btn-remove" title="Remove tag from owner question">−Owner</button>';
+			}
+			$actionHtml .= '</form>';
 			$tableHtml .= '<td style="padding:8px; white-space:nowrap;">' . $actionHtml . '</td>';
 			$tableHtml .= '</tr>';
 		}
@@ -282,9 +371,13 @@ class qa_book_suggested_tags_page
 	{
 		return '<style>
 #book-suggested-tags .btn-approve,
-#book-suggested-tags .btn-reject { padding:4px 10px; cursor:pointer; border-radius:3px; font-size:12px; }
+#book-suggested-tags .btn-reject,
+#book-suggested-tags .btn-filter,
+#book-suggested-tags .btn-remove { padding:4px 10px; cursor:pointer; border-radius:3px; font-size:12px; }
 #book-suggested-tags .btn-approve { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
 #book-suggested-tags .btn-reject { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
+#book-suggested-tags .btn-filter { background:#fff3e0; color:#e65100; border:1px solid #ffcc80; }
+#book-suggested-tags .btn-remove { background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; }
 [data-theme="dark"] #book-suggested-tags table { color:#ddd; }
 [data-theme="dark"] #book-suggested-tags thead tr { background:#2a2a2a !important; border-bottom-color:#444 !important; }
 [data-theme="dark"] #book-suggested-tags tbody tr { border-bottom-color:#333 !important; }
@@ -293,6 +386,8 @@ class qa_book_suggested_tags_page
 [data-theme="dark"] #book-suggested-tags select { background:#2a2a3a; color:#e0e0e0; border:1px solid #444; }
 [data-theme="dark"] #book-suggested-tags .btn-approve { background:#1b5e20; color:#c8e6c9; border-color:#388e3c; }
 [data-theme="dark"] #book-suggested-tags .btn-reject { background:#b71c1c; color:#ffcdd2; border-color:#d32f2f; }
+[data-theme="dark"] #book-suggested-tags .btn-filter { background:#e65100; color:#fff3e0; border-color:#ff9800; }
+[data-theme="dark"] #book-suggested-tags .btn-remove { background:#0d47a1; color:#bbdefb; border-color:#1976d2; }
 </style>';
 	}
 }

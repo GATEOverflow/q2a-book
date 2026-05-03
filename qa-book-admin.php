@@ -188,6 +188,10 @@ class qa_book_admin {
 			qa_book_set('book_plugin_prefix',(bool)qa_post_text('book_plugin_prefix'));
 			qa_book_set('book_plugin_specialtags',qa_post_text('book_plugin_specialtags'));
 
+			for ($v = 1; $v <= 4; $v++) {
+				qa_book_set('extra_filter_tags_vol' . $v, qa_post_text('extra_filter_tags_vol' . $v));
+			}
+
 			qa_book_set('book_plugin_css',qa_post_text('book_plugin_css'));
 			qa_book_set('book_plugin_black_css',qa_post_text('book_plugin_black_css'));
 
@@ -418,6 +422,19 @@ class qa_book_admin {
 			</div>',
 		'type' => 'static',
 		);
+
+		// Extra filter tags per volume
+		$fields[] = array('type' => 'blank');
+		$fields[] = array(
+			'value' => '<h3>Extra Filter Tags per Volume</h3><p><i>Comma-separated tags treated as special/ignored when generating that volume\'s book. Used by mintag() for title prefix filtering.</i></p>',
+			'type' => 'static',
+		);
+		for ($v = 1; $v <= 4; $v++) {
+			$fields[] = array(
+				'value' => '<label><b>Volume ' . $v . ' Extra Filter Tags:</b></label><br/><textarea rows="3" style="width:100%" name="extra_filter_tags_vol' . $v . '">' . qa_html(qa_book_get('extra_filter_tags_vol' . $v)) . '</textarea>',
+				'type' => 'static',
+			);
+		}
 
 		$fields[] = array(
 			'label' => 'Book PDF Permalink',

@@ -595,55 +595,118 @@ function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false,
             }
         }
 
-        // Only consider mintags used by at least 2 questions as valid topics
+        // Separate mintags by usage count
+        $singletonMintags = array_keys(array_filter($allMintags, function($c) { return $c == 1; }));
         $validMintags = array_keys(array_filter($allMintags, function($c) { return $c >= 2; }));
-        if (empty($validMintags)) continue;
 
-        // For each question, find candidate mintags it doesn't already have
-        // A candidate is a valid mintag that appears on sibling questions (sharing at least one tag)
+        // Phase 1: Singleton mintags (count=1) — find other questions that could also use this tag
+        // For each singleton tag, look at all questions in this category that don't have it
+        // and check if they might be about the same subtopic
         $candidates = [];
 
-        foreach ($questionData as $qid => $qdata) {
-            if ($count + count($candidates) >= $maxPerRun * 2) break;
-            if ((time() - $startTime) > 100) break;
-
-            $myMintag = $qdata['mintag_slug'];
-            if ($myMintag === '') continue;
-
-            // Find candidate mintags: valid mintags that Q doesn't already have
-            // AND that appear as the mintag for questions sharing at least one non-special tag with Q
-            $candidateMintags = [];
-            $sharedQids = $tagToQuestions[$myMintag] ?? [];
-
-            foreach ($sharedQids as $otherId) {
-                if ($otherId === $qid) continue;
-                $otherMintag = $questionData[$otherId]['mintag_slug'];
-                if ($otherMintag === '' || $otherMintag === $myMintag) continue;
-                if (in_array($otherMintag, $qdata['tags'])) continue;
-                if (ignoredtags($otherMintag)) continue;
-                if (!in_array($otherMintag, $validMintags)) continue;
-                $candidateMintags[$otherMintag] = true;
+        if (!empty($singletonMintags)) {
+            // Build reverse lookup: which question owns each singleton mintag
+            $singletonOwners = [];
+            foreach ($questionData as $qid => $qdata) {
+                if (in_array($qdata['mintag_slug'], $singletonMintags)) {
+                    $singletonOwners[$qdata['mintag_slug']] = $qid;
+                }
             }
 
-            if (empty($candidateMintags)) continue;
-            $candidateList = array_keys($candidateMintags);
+            foreach ($singletonMintags as $singleTag) {
+                if ($count + count($candidates) >= $maxPerRun * 2) break;
+                if ((time() - $startTime) > 100) break;
 
-            // Check if suggestions already exist for this question
-            $existingTags = qa_db_read_all_values(qa_db_query_sub(
-                "SELECT suggested_tags FROM ^tag_suggestions WHERE postid=# AND status IS NULL",
-                $qid
-            ));
-            $candidateList = array_diff($candidateList, $existingTags);
-            if (empty($candidateList)) continue;
+                $ownerQid = $singletonOwners[$singleTag] ?? null;
+                if (!$ownerQid) continue;
+                $ownerData = $questionData[$ownerQid];
 
-            $candidates[] = [
-                'qid' => $qid,
-                'title' => $qdata['title'],
-                'content' => mb_substr($qdata['content'], 0, 1000),
-                'tags' => implode(',', $qdata['tags']),
-                'candidate_tags' => array_values($candidateList),
-            ];
+                // Find questions that share at least one non-special tag with the owner
+                // but don't already have the singleton tag
+                foreach ($ownerData['tags'] as $sharedTag) {
+                    if (ignoredtags($sharedTag)) continue;
+                    $relatedQids = $tagToQuestions[$sharedTag] ?? [];
+                    foreach ($relatedQids as $candidateQid) {
+                        if ($candidateQid === $ownerQid) continue;
+                        $cData = $questionData[$candidateQid];
+                        if (in_array($singleTag, $cData['tags'])) continue;
+
+                        // Check if suggestion already exists
+                        $existingTags = qa_db_read_all_values(qa_db_query_sub(
+                            "SELECT suggested_tags FROM ^tag_suggestions WHERE postid=# AND status IS NULL",
+                            $candidateQid
+                        ));
+                        if (in_array($singleTag, $existingTags)) continue;
+
+                        // Add as candidate (tag the other question with the singleton tag)
+                        $key = $candidateQid . ':' . $singleTag;
+                        if (!isset($candidates[$key])) {
+                            $candidates[$key] = [
+                                'qid' => $candidateQid,
+                                'title' => $cData['title'],
+                                'content' => mb_substr($cData['content'], 0, 1000),
+                                'tags' => implode(',', $cData['tags']),
+                                'candidate_tags' => [$singleTag],
+                                'source' => 'singleton(owner:' . $ownerQid . ')',
+                            ];
+                        } else {
+                            // Merge candidate tag if question already has other candidates
+                            if (!in_array($singleTag, $candidates[$key]['candidate_tags'])) {
+                                $candidates[$key]['candidate_tags'][] = $singleTag;
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        // Phase 2: Multi-use mintags (count>=2) — original logic
+        if (!empty($validMintags)) {
+            foreach ($questionData as $qid => $qdata) {
+                if ($count + count($candidates) >= $maxPerRun * 2) break;
+                if ((time() - $startTime) > 100) break;
+
+                $myMintag = $qdata['mintag_slug'];
+                if ($myMintag === '') continue;
+
+                // Find candidate mintags: valid mintags that Q doesn't already have
+                $candidateMintags = [];
+                $sharedQids = $tagToQuestions[$myMintag] ?? [];
+
+                foreach ($sharedQids as $otherId) {
+                    if ($otherId === $qid) continue;
+                    $otherMintag = $questionData[$otherId]['mintag_slug'];
+                    if ($otherMintag === '' || $otherMintag === $myMintag) continue;
+                    if (in_array($otherMintag, $qdata['tags'])) continue;
+                    if (ignoredtags($otherMintag)) continue;
+                    if (!in_array($otherMintag, $validMintags)) continue;
+                    $candidateMintags[$otherMintag] = true;
+                }
+
+                if (empty($candidateMintags)) continue;
+                $candidateList = array_keys($candidateMintags);
+
+                // Check if suggestions already exist for this question
+                $existingTags = qa_db_read_all_values(qa_db_query_sub(
+                    "SELECT suggested_tags FROM ^tag_suggestions WHERE postid=# AND status IS NULL",
+                    $qid
+                ));
+                $candidateList = array_diff($candidateList, $existingTags);
+                if (empty($candidateList)) continue;
+
+                $key = $qid . ':multi';
+                $candidates[$key] = [
+                    'qid' => $qid,
+                    'title' => $qdata['title'],
+                    'content' => mb_substr($qdata['content'], 0, 1000),
+                    'tags' => implode(',', $qdata['tags']),
+                    'candidate_tags' => array_values($candidateList),
+                    'source' => 'multi-use',
+                ];
+            }
+        }
+
+        $candidates = array_values($candidates);
 
         // Send candidates to Gemini in batches of 5 (each has full text + multiple candidates)
         $batches = array_chunk($candidates, 5);
@@ -663,8 +726,8 @@ function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false,
 
                     if (!$dryrun) {
                         qa_db_query_sub(
-                            "INSERT INTO ^tag_suggestions (postid, suggested_tags, created) VALUES (#, $, NOW())",
-                            $item['qid'], $approvedTag
+                            "INSERT INTO ^tag_suggestions (postid, suggested_tags, source, created) VALUES (#, $, $, NOW())",
+                            $item['qid'], $approvedTag, ($item['source'] ?? null)
                         );
                     }
                     $count++;
@@ -673,7 +736,7 @@ function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false,
                         'title' => $item['title'],
                         'tags' => $item['tags'],
                         'suggested' => $approvedTag,
-                        'reason' => 'Gemini approved based on question content.',
+                        'reason' => 'Gemini approved [' . ($item['source'] ?? 'unknown') . ']',
                     ];
                 }
 
@@ -685,7 +748,7 @@ function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false,
                         'title' => $item['title'],
                         'tags' => $item['tags'],
                         'suggested' => $rejTag,
-                        'reason' => 'Gemini rejected.',
+                        'reason' => 'Gemini rejected [' . ($item['source'] ?? 'unknown') . ']',
                     ];
                 }
             }
@@ -1029,21 +1092,19 @@ if($volume)
     {
         case 1:
             $catinc = " and qs.categoryid in (13,26,27,28,29,30,31,32,33,35,112,113)";break;
-            //$catinc = " and qs.categoryid in (118)";break;
-            //$catinc = " and qs.categoryid in (30)";break;
-            qa_book_set('extra_filter_tags', 'onto');
         case 2:
             $catinc = " and qs.categoryid in (2,12,14,18,36,37,118)";break;
-            //$catinc = " and qs.categoryid in (2,12,14,18,36,37,15,16,17,19,22,118)";
-            qa_book_set('extra_filter_tags', 'direct-mapping,little-endian-big-endian,demand-paging,page-fault,ll-parser,round-robin-scheduling,translation-lookaside-buffer,abstract-syntax-tree,dual-function,conjunctive-normal-form,timestamp-ordering,abstract-data-type,ambiguous-grammar,least-recently-used,viable-prefix,heap-sort,inversion,maximum-minimum,conflict-misses,hamming-code,icmp,pure-aloha,paging,safe-query,data-independence,serial-communication,stall,selection-sort,uniform-hashing,control-unit,dram,bubble-sort,breadth-first-search,directed-acyclic-graph,two-phase-locking-protocol,binary-codes');
-            break;
-            //$catinc = " and qs.categoryid in (2,14)";break;
         case 3:
-            qa_book_set('extra_filter_tags', 'direct-mapping,little-endian-big-endian,demand-paging,page-fault,ll-parser,round-robin-scheduling,translation-lookaside-buffer,abstract-syntax-tree,dual-function,conjunctive-normal-form,timestamp-ordering,abstract-data-type,ambiguous-grammar,least-recently-used,viable-prefix,heap-sort,inversion,maximum-minimum,conflict-misses,hamming-code,icmp,pure-aloha,paging,safe-query,data-independence,serial-communication,stall,selection-sort,uniform-hashing,control-unit,dram,bubble-sort,breadth-first-search,directed-acyclic-graph,two-phase-locking-protocol,binary-codes');
             $catinc = " and qs.categoryid in (15,16,17,19,22)";break;
         case 4:
-            qa_book_set('extra_filter_tags', 'direct-mapping,little-endian-big-endian,demand-paging,page-fault,ll-parser,round-robin-scheduling,translation-lookaside-buffer,abstract-syntax-tree,dual-function,conjunctive-normal-form,timestamp-ordering,abstract-data-type,ambiguous-grammar,least-recently-used,viable-prefix,heap-sort,inversion,maximum-minimum,conflict-misses,hamming-code,icmp,pure-aloha,paging,safe-query,data-independence,serial-communication,stall,selection-sort,uniform-hashing,control-unit,dram,bubble-sort,breadth-first-search,directed-acyclic-graph,two-phase-locking-protocol,binary-codes');
             $catinc = " and qs.categoryid in (15,16,17,19,22)";break;
+    }
+    // Load extra filter tags for this volume from admin settings
+    $volExtraTags = qa_book_get('extra_filter_tags_vol' . $volume);
+    if (trim($volExtraTags)) {
+        qa_book_set('extra_filter_tags', $volExtraTags);
+    } else {
+        qa_book_set('extra_filter_tags', '');
     }
 }
 if($gate_da) {
