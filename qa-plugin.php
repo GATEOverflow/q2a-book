@@ -458,7 +458,7 @@ function qa_book_make_topic_exams($filterCatIds = null, $maxPerTest = 15, $dryru
 				$mNum1 = count($mChunk1);
 				$mNum2 = count($mChunk2);
 				$mTotalMarks = $mNum1 + 2 * $mNum2;
-				$mTime = $mNum1 + 2 * $mNum2;
+				$mTime = ceil(1.8*($mTotalMarks));
 				$mTotalQs = count($mChunk);
 
 				// Use the merged topic names (up to 3, then "& more")
