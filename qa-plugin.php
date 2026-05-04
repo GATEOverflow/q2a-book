@@ -840,6 +840,177 @@ function qa_book_verify_tags_gemini($apiKey, $batch) {
     return $results;
 }
 
+/**
+ * Detect potentially duplicate/mergeable mintags within each category.
+ * Uses string similarity as a pre-filter, then Gemini to confirm.
+ * Stores confirmed merge pairs in qa_tag_merge_suggestions table.
+ *
+ * @param array|null $filterCatIds Only process these category IDs (null = all)
+ * @param int $maxPairs Maximum merge pairs to detect per run
+ * @param bool $dryrun If true, don't insert into DB
+ * @return array ['count' => int, 'pairs' => [['tag_a'=>..., 'tag_b'=>..., 'category'=>...], ...]]
+ */
+function qa_book_detect_merge_candidates($filterCatIds = null, $maxPairs = 30, $dryrun = false) {
+    set_time_limit(120);
+    $apiKey = qa_opt('openai_gemini_api_key');
+    if (empty($apiKey)) return ['count' => 0, 'pairs' => []];
+
+    $cats = [];
+    qa_book_getallcats($cats);
+
+    $allCandidatePairs = [];
+    $confirmedPairs = [];
+
+    // Load all existing merge pairs to avoid per-pair DB queries
+    $existingPairs = [];
+    $existingRows = qa_db_read_all_assoc(qa_db_query_sub(
+        "SELECT tag_a, tag_b FROM ^tag_merge_suggestions"
+    ));
+    foreach ($existingRows as $er) {
+        $existingPairs[$er['tag_a'] . '|' . $er['tag_b']] = true;
+        $existingPairs[$er['tag_b'] . '|' . $er['tag_a']] = true;
+    }
+
+    foreach ($cats as $cat) {
+        $categoryid = (int) $cat['categoryid'];
+        if ($filterCatIds !== null && !in_array($categoryid, $filterCatIds)) continue;
+
+        // Get all mintags in this category
+        $questions = qa_db_read_all_assoc(qa_db_query_sub(
+            "SELECT qs.postid, qs.tags
+             FROM ^posts qs
+             WHERE qs.type='Q' AND qs.closedbyid IS NULL AND qs.categoryid=#
+               AND qs.tags NOT LIKE '%usermod%'
+               AND qs.tags NOT LIKE '%usergate%'
+             ORDER BY qs.postid",
+            $categoryid
+        ));
+
+        // Collect unique mintags in this category
+        $mintags = [];
+        foreach ($questions as $q) {
+            $mt = strtolower(str_replace(' ', '-', trim(mintag($q))));
+            if ($mt !== '' && !ignoredtags($mt)) {
+                $mintags[$mt] = ($mintags[$mt] ?? 0) + 1;
+            }
+        }
+
+        $tagList = array_keys($mintags);
+        if (count($tagList) < 2) continue;
+
+        // Pre-filter: find pairs with high string similarity or substring relationship
+        $candidatePairs = [];
+        for ($i = 0; $i < count($tagList); $i++) {
+            for ($j = $i + 1; $j < count($tagList); $j++) {
+                $a = $tagList[$i];
+                $b = $tagList[$j];
+
+                // Skip if already in DB
+                if (isset($existingPairs[$a . '|' . $b])) continue;
+
+                // Check similarity: Levenshtein, substring, or similar_text
+                $lev = levenshtein($a, $b);
+                $maxLen = max(strlen($a), strlen($b));
+                $similarity = 1 - ($lev / $maxLen);
+
+                $isSubstring = (strpos($a, $b) !== false || strpos($b, $a) !== false);
+                $pluralMatch = ($a . 's' === $b || $b . 's' === $a || $a . 'es' === $b || $b . 'es' === $a);
+
+                if ($similarity >= 0.7 || $isSubstring || $pluralMatch) {
+                    $candidatePairs[] = ['tag_a' => $a, 'tag_b' => $b, 'category' => $cat['title']];
+                }
+            }
+        }
+
+        $allCandidatePairs = array_merge($allCandidatePairs, $candidatePairs);
+    }
+
+    if (empty($allCandidatePairs)) return ['count' => 0, 'pairs' => []];
+
+    // Limit candidates and verify with Gemini in batches
+    $allCandidatePairs = array_slice($allCandidatePairs, 0, $maxPairs * 3);
+
+    $batches = array_chunk($allCandidatePairs, 15);
+    foreach ($batches as $batch) {
+        if (count($confirmedPairs) >= $maxPairs) break;
+
+        $pairsForPrompt = [];
+        foreach ($batch as $idx => $pair) {
+            $pairsForPrompt[] = ['index' => $idx, 'tag_a' => $pair['tag_a'], 'tag_b' => $pair['tag_b']];
+        }
+
+        $prompt = "You are a computer science subject expert. Below are pairs of tags (subtopic names) from exam questions.\n\n"
+            . "For each pair, determine if the two tags refer to the SAME concept and should be merged into one tag.\n"
+            . "Rules:\n"
+            . "- Merge if they are synonyms, plural/singular variants, or different phrasings of the same concept.\n"
+            . "- Do NOT merge if they are related but distinct subtopics (e.g., 'stack' vs 'queue').\n"
+            . "- For each merge, specify which tag should be the primary (more standard/commonly used name).\n\n"
+            . "Pairs:\n" . json_encode($pairsForPrompt, JSON_PRETTY_PRINT) . "\n\n"
+            . "Respond with a JSON array: [{\"index\": 0, \"merge\": true, \"primary\": \"preferred-tag\"}, ...]\n"
+            . "If they should NOT be merged, set merge to false and omit primary.\n"
+            . "Only return the JSON array, nothing else.";
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode($apiKey);
+        $data = [
+            'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+            'generationConfig' => [
+                'temperature' => 0.1,
+                'maxOutputTokens' => 4000,
+                'responseMimeType' => 'application/json',
+            ],
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => json_encode($data),
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_CONNECTTIMEOUT => 10,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || empty($response)) continue;
+
+        $decoded = json_decode($response, true);
+        $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        $parsed = json_decode($text, true);
+
+        if (!is_array($parsed)) continue;
+
+        foreach ($parsed as $result) {
+            if (count($confirmedPairs) >= $maxPairs) break;
+            $idx = $result['index'] ?? null;
+            if ($idx === null || !isset($batch[$idx])) continue;
+            if (empty($result['merge'])) continue;
+
+            $pair = $batch[$idx];
+            $primary = $result['primary'] ?? $pair['tag_b'];
+            // Ensure tag_a is the one to rename, tag_b is the primary (target)
+            if ($primary === $pair['tag_a']) {
+                $rename = $pair['tag_b'];
+                $target = $pair['tag_a'];
+            } else {
+                $rename = $pair['tag_a'];
+                $target = $primary;
+            }
+
+            if (!$dryrun) {
+                qa_db_query_sub(
+                    "INSERT IGNORE INTO ^tag_merge_suggestions (tag_a, tag_b, category, created) VALUES ($, $, $, NOW())",
+                    $rename, $target, $pair['category']
+                );
+            }
+            $confirmedPairs[] = ['tag_a' => $rename, 'tag_b' => $target, 'category' => $pair['category']];
+        }
+    }
+
+    return ['count' => count($confirmedPairs), 'pairs' => $confirmedPairs];
+}
+
 function qa_book_plugin_createBook($return=false) {
     set_time_limit(600); // book generation can be slow
 
@@ -1019,6 +1190,54 @@ function qa_book_plugin_createBook($return=false) {
 
         echo $html;
         return ($dryrun ? 'Would generate' : 'Generated') . ' ' . $result['count'] . ' tag suggestions.';
+    }
+
+    // Handle detect_merges request: find potentially duplicate mintags
+    if (qa_get('detect_merges')) {
+        $isCron = (qa_get('cron') === 'true');
+        if (!$isCron && (!qa_is_logged_in() || qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN)) {
+            echo '<h2>Admin access required.</h2>';
+            return 'Access denied.';
+        }
+
+        $dryrun = (bool) qa_get('dryrun');
+        $maxPairs = (int) qa_get('max');
+        if ($maxPairs < 1) $maxPairs = 30;
+
+        $catidParam = qa_get('catid');
+        $filterCatIds = null;
+        if ($catidParam) {
+            $filterCatIds = array_map('intval', explode(',', $catidParam));
+        }
+
+        $result = qa_book_detect_merge_candidates($filterCatIds, $maxPairs, $dryrun);
+
+        $html = '<h2>' . ($dryrun ? 'Dry run: found' : 'Stored') . ' ' . $result['count'] . ' merge candidates</h2>';
+        if ($dryrun) {
+            $html .= '<p><em>Dry run — nothing stored.</em> <a href="' . qa_path('book', array('detect_merges' => 1)) . '">Run for real</a></p>';
+        }
+
+        $html .= '<table style="border-collapse:collapse; width:100%; font-size:13px; margin-top:12px;">';
+        $html .= '<tr style="background:#f5f5f5;"><th style="padding:6px;">Rename (tag_a)</th><th style="padding:6px;">To (tag_b)</th><th style="padding:6px;">Category</th><th style="padding:6px;">Copy</th></tr>';
+        foreach ($result['pairs'] as $pair) {
+            $copyText = qa_html($pair['tag_a'] . ',' . $pair['tag_b']);
+            $html .= '<tr style="border-bottom:1px solid #eee;">';
+            $html .= '<td style="padding:6px;">' . qa_html($pair['tag_a']) . '</td>';
+            $html .= '<td style="padding:6px;"><b>' . qa_html($pair['tag_b']) . '</b></td>';
+            $html .= '<td style="padding:6px; font-size:11px;">' . qa_html($pair['category']) . '</td>';
+            $html .= '<td style="padding:6px;"><code>' . $copyText . '</code></td>';
+            $html .= '</tr>';
+        }
+        $html .= '</table>';
+
+        $html .= '<h3 style="margin-top:20px;">Usage</h3><table style="font-size:13px;">';
+        $html .= '<tr><td>Dry run</td><td><a href="' . qa_path('book', array('detect_merges' => 1, 'dryrun' => 1)) . '">detect_merges=1&dryrun=1</a></td></tr>';
+        $html .= '<tr><td>Run for real</td><td><a href="' . qa_path('book', array('detect_merges' => 1)) . '">detect_merges=1</a></td></tr>';
+        $html .= '<tr><td>Review</td><td><a href="' . qa_path('admin/book-suggested-tags') . '">admin/book-suggested-tags</a></td></tr>';
+        $html .= '</table>';
+
+        echo $html;
+        return ($dryrun ? 'Found' : 'Stored') . ' ' . $result['count'] . ' merge candidates.';
     }
 
     $globalquestioncount = 0;

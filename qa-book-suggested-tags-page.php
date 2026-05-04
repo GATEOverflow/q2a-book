@@ -118,6 +118,30 @@ class qa_book_suggested_tags_page
 			}
 		}
 
+		// Handle merge approve (mark as done)
+		if (qa_clicked('approve_merge')) {
+			$ok = qa_check_form_security_code('book-suggested-tags', qa_post_text('code'));
+			if (!$ok) {
+				$messageHtml = $this->msg('Security check failed. Please retry.', 'error');
+			} else {
+				$mergeId = (int) qa_post_text('merge_id');
+				qa_db_query_sub("UPDATE ^tag_merge_suggestions SET status='approved' WHERE id=#", $mergeId);
+				$messageHtml = $this->msg('Merge #' . $mergeId . ' marked as done.', 'success');
+			}
+		}
+
+		// Handle merge reject
+		if (qa_clicked('reject_merge')) {
+			$ok = qa_check_form_security_code('book-suggested-tags', qa_post_text('code'));
+			if (!$ok) {
+				$messageHtml = $this->msg('Security check failed. Please retry.', 'error');
+			} else {
+				$mergeId = (int) qa_post_text('merge_id');
+				qa_db_query_sub("UPDATE ^tag_merge_suggestions SET status='rejected' WHERE id=#", $mergeId);
+				$messageHtml = $this->msg('Merge #' . $mergeId . ' rejected.', 'success');
+			}
+		}
+
 		$qa_content = qa_content_prepare();
 		$qa_content['title'] = 'Suggested Tags (from DB)';
 
@@ -299,7 +323,43 @@ class qa_book_suggested_tags_page
 		}
 		$paginationHtml .= '</div>';
 
-		$qa_content['custom'] = '<div id="book-suggested-tags">' . $navHtml . $messageHtml . $formHtml . $summaryHtml . $tableHtml . $paginationHtml . $this->darkModeCss() . '</div>';
+		// ---- Merge Suggestions Section ----
+		$mergeHtml = '';
+		$mergeRows = qa_db_read_all_assoc(qa_db_query_sub(
+			"SELECT id, tag_a, tag_b, category, created FROM ^tag_merge_suggestions WHERE status='pending' ORDER BY created DESC LIMIT 100"
+		));
+		if (!empty($mergeRows)) {
+			$mergeHtml .= '<h3 style="margin-top:30px; border-top:2px solid #ddd; padding-top:16px;">Tag Merge Suggestions</h3>';
+			$mergeHtml .= '<p style="color:#666; font-size:12px;">Rename tag_a → tag_b. Copy the "Merge Pair" value into tagging-tools for bulk rename.</p>';
+			$mergeHtml .= '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
+			$mergeHtml .= '<thead><tr style="background:#f5f5f5; border-bottom:2px solid #ddd;">';
+			$mergeHtml .= '<th style="padding:8px; text-align:left;">Rename (tag_a)</th>';
+			$mergeHtml .= '<th style="padding:8px; text-align:left;">To (tag_b)</th>';
+			$mergeHtml .= '<th style="padding:8px; text-align:left;">Category</th>';
+			$mergeHtml .= '<th style="padding:8px; text-align:left;">Merge Pair</th>';
+			$mergeHtml .= '<th style="padding:8px; text-align:left;">Action</th>';
+			$mergeHtml .= '</tr></thead><tbody>';
+
+			foreach ($mergeRows as $mr) {
+				$mergePair = qa_html($mr['tag_a'] . ',' . $mr['tag_b']);
+				$mergeHtml .= '<tr style="border-bottom:1px solid #eee;">';
+				$mergeHtml .= '<td style="padding:8px;">' . qa_html($mr['tag_a']) . '</td>';
+				$mergeHtml .= '<td style="padding:8px;"><b>' . qa_html($mr['tag_b']) . '</b></td>';
+				$mergeHtml .= '<td style="padding:8px; font-size:11px;">' . qa_html($mr['category']) . '</td>';
+				$mergeHtml .= '<td style="padding:8px;"><code style="background:#f0f0f0; padding:2px 6px; border-radius:3px; user-select:all;">' . $mergePair . '</code></td>';
+				$mergeHtml .= '<td style="padding:8px;">'
+					. '<form method="post" action="' . qa_html(qa_path('admin/book-suggested-tags', array('categoryid' => $selectedCategory, 'per_page' => $perPage, 'page' => $page))) . '" style="margin:0; display:flex; gap:4px;">'
+					. '<input type="hidden" name="code" value="' . qa_html($securityCode) . '">'
+					. '<input type="hidden" name="merge_id" value="' . (int) $mr['id'] . '">'
+					. '<button type="submit" name="approve_merge" class="btn-approve">Done</button>'
+					. '<button type="submit" name="reject_merge" class="btn-reject">Reject</button>'
+					. '</form></td>';
+				$mergeHtml .= '</tr>';
+			}
+			$mergeHtml .= '</tbody></table>';
+		}
+
+		$qa_content['custom'] = '<div id="book-suggested-tags">' . $navHtml . $messageHtml . $formHtml . $summaryHtml . $tableHtml . $paginationHtml . $mergeHtml . $this->darkModeCss() . '</div>';
 
 		return $qa_content;
 	}
