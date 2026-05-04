@@ -1434,7 +1434,7 @@ foreach($cats as $cat) {
         }
     }
     $privatefilterstring=" qs.tags not like '%memorybased%' and qs.tags not like '%goclasses%' ";
-    $privatefilterstring_em=" qs.tags not like '%memorybased% and qs.tags not like '%goclasses%' or qs.title like '%Weekly Quiz%' ";
+    $privatefilterstring_em=" qs.tags not like '%memorybased%' and qs.tags not like '%goclasses%' or qs.title like '%Weekly Quiz%' ";
     if($qtags) {
         $booknamesuffix .="_$qtags";
         $incsql .= " and (qs.tags like '%$qtags%') ";
