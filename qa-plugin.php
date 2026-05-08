@@ -842,6 +842,58 @@ function qa_book_verify_tags_gemini($apiKey, $batch) {
 }
 
 /**
+ * Generate a short introduction for a book category using Gemini API.
+ * Summarizes key concepts and formulas for the given topics.
+ */
+function qa_book_generate_category_intro($categoryName, $topics) {
+    $apiKey = qa_opt('openai_gemini_api_key');
+    if (empty($apiKey)) return '';
+
+    $topicList = implode(', ', $topics);
+    $prompt = "You are writing a concise introduction for the \"$categoryName\" chapter of a GATE Computer Science exam preparation book. "
+        . "The chapter covers these topics: $topicList.\n\n"
+        . "Write a short introduction (200-400 words) that:\n"
+        . "1. Briefly introduces the subject area and its importance in GATE CS exam\n"
+        . "2. Lists the key concepts covered under each major topic\n"
+        . "3. Includes the most important formulas and results that students should remember\n"
+        . "4. Uses LaTeX notation (with \\( \\) for inline math and \\[ \\] for display math) for all formulas\n\n"
+        . "Format the output as clean HTML using <p>, <ul>, <li>, <strong> tags. Do not include any heading tags. "
+        . "Do not use markdown. Keep it crisp and exam-focused.";
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode($apiKey);
+    $data = [
+        'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+        'generationConfig' => [
+            'temperature' => 0.3,
+            'maxOutputTokens' => 2000,
+        ],
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || empty($response)) return '';
+
+    $decoded = json_decode($response, true);
+    $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+    if (empty($text)) return '';
+
+    return '<div class="category-intro">' . $text . '</div>';
+}
+
+/**
  * Detect potentially duplicate/mergeable mintags within each category.
  * Uses string similarity as a pre-filter, then Gemini to confirm.
  * Stores confirmed merge pairs in qa_tag_merge_suggestions table.
@@ -1390,6 +1442,8 @@ for($i=1; $i <= 10; $i++) {
     $filter_desc[$i] = qa_book_get('book_plugin_custom_filter'.$i."_desc");
 }
 
+$category_intro_enabled = qa_get('category_intro');
+
 foreach($cats as $cat) {
     $qcount=0;
     $incsql = '';
@@ -1529,6 +1583,21 @@ foreach($cats as $cat) {
     $topicblockprefix = '<div class="topic-block" id="'.$cat['categoryid'].'_topic_[tlink]"><h2 class="top-title"><a class="topic-link" href="'.qa_network_get($branch).'tag/[topicurl]"> [topic] </a> <span class="topic-title-count"> ([topic-count])</span> </h2> <a class="top-link" href=#[top-link]>top</a> </div>';
     $qtopiccount = 1;
     $branch = null;
+
+    // Generate category intro via Gemini if enabled
+    $categoryIntroHtml = '';
+    if ($category_intro_enabled) {
+        $topicsList = [];
+        foreach ($q2 as $qgroup) {
+            $t = mintag($qgroup[0]);
+            if ($t !== '' && !in_array($t, $topicsList))
+                $topicsList[] = $t;
+        }
+        if (!empty($topicsList)) {
+            $categoryIntroHtml = qa_book_generate_category_intro($cat['title'], $topicsList);
+        }
+    }
+
     foreach($q2 as $qs) {
         usort($qs, "mysortanswers");
         // toc entry
@@ -1992,7 +2061,7 @@ foreach($cats as $cat) {
                 $catout = str_replace('[cat-anchor]','cat'.$cat['categoryid'],$catout);
                 $catout = str_replace('[cat-title]',$catnumber.' '.$cat['title'],$catout);
                 $catout = str_replace('[cat-count]',$cqcount,$catout);
-                $catout = str_replace('[questions]',$qhtml.$answerkeytable,$catout);
+                $catout = str_replace('[questions]',$categoryIntroHtml.$qhtml.$answerkeytable,$catout);
                 $qout .= $catout;
             }
             else {
