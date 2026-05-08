@@ -14,6 +14,7 @@ qa_register_plugin_module('widget', 'qa-book-widget.php', 'qa_book_widget', 'Boo
 
 qa_register_plugin_module('page', 'qa-topic-exams-page.php', 'qa_topic_exams_page', 'Topic Exams Index');
 qa_register_plugin_module('page', 'qa-book-suggested-tags-page.php', 'qa_book_suggested_tags_page', 'Suggested Tags Page');
+qa_register_plugin_module('page', 'qa-aptitude-migrate-page.php', 'qa_aptitude_migrate_page', 'Aptitude Migration');
 
 qa_register_plugin_phrases('qa-book-lang-*.php', 'book');
 
