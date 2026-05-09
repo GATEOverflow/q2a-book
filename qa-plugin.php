@@ -850,22 +850,32 @@ function qa_book_generate_category_intro($categoryName, $topics) {
     if (empty($apiKey)) return '';
 
     $topicList = implode(', ', $topics);
-    $prompt = "You are writing a concise introduction for the \"$categoryName\" chapter of a GATE Computer Science exam preparation book. "
+    $prompt = "You are writing a comprehensive study guide introduction for the \"$categoryName\" chapter of a GATE Computer Science exam preparation book. "
         . "The chapter covers these topics: $topicList.\n\n"
-        . "Write a short introduction (200-400 words) that:\n"
-        . "1. Briefly introduces the subject area and its importance in GATE CS exam\n"
-        . "2. Lists the key concepts covered under each major topic\n"
-        . "3. Includes the most important formulas and results that students should remember\n"
-        . "4. Uses LaTeX notation (with \\( \\) for inline math and \\[ \\] for display math) for all formulas\n\n"
-        . "Format the output as clean HTML using <p>, <ul>, <li>, <strong> tags. Do not include any heading tags. "
-        . "Do not use markdown. Keep it crisp and exam-focused.";
+        . "Write a detailed, exam-focused reference section (1500-2500 words) structured as follows:\n\n"
+        . "1. **Subject Overview** (1 paragraph): What this subject is about and why it matters for GATE CS. Mention typical weightage and question patterns.\n\n"
+        . "2. **Topic-wise Key Concepts**: For EACH topic listed above, provide a dedicated subsection with:\n"
+        . "   - Definition and core idea in 2-3 sentences\n"
+        . "   - All important formulas, theorems, and results (numbered or bulleted)\n"
+        . "   - Key properties and identities students must memorize\n"
+        . "   - Common pitfalls or tricky points that appear in GATE questions\n"
+        . "   - Standard problem-solving techniques or shortcuts\n\n"
+        . "3. **Quick Formula Reference**: A consolidated table or bulleted list of ALL important formulas from all topics above, organized for quick revision.\n\n"
+        . "4. **Important Tips for GATE**: 5-8 practical exam tips specific to this subject — what to watch out for, common mistakes, time-saving tricks.\n\n"
+        . "Rules:\n"
+        . "- Use LaTeX notation with \\( \\) for inline math and \\[ \\] for display math for ALL formulas and mathematical expressions.\n"
+        . "- Be thorough — include every formula and result a student would need. Do not skip any topic.\n"
+        . "- Format as clean HTML using <h3> for topic subsections, <p>, <ul>, <li>, <ol>, <strong>, <em>, <table>, <tr>, <td>, <th> tags.\n"
+        . "- Do not use <h1> or <h2> tags. Use <h3> and <h4> only.\n"
+        . "- Do not use markdown syntax. Output pure HTML.\n"
+        . "- Make it genuinely useful as a revision sheet before attempting the questions that follow.";
 
     $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode($apiKey);
     $data = [
         'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
         'generationConfig' => [
-            'temperature' => 0.3,
-            'maxOutputTokens' => 2000,
+            'temperature' => 0.4,
+            'maxOutputTokens' => 20000,
         ],
     ];
 
