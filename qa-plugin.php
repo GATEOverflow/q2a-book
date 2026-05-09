@@ -842,10 +842,36 @@ function qa_book_verify_tags_gemini($apiKey, $batch) {
 }
 
 /**
- * Generate a short introduction for a book category using Gemini API.
- * Summarizes key concepts and formulas for the given topics.
+ * Generate or retrieve a cached category intro for the book.
+ * Calls Gemini API only if qa_get('fresh_intro') is set or no cached version exists.
  */
-function qa_book_generate_category_intro($categoryName, $topics) {
+function qa_book_generate_category_intro($categoryName, $topics, $bookname) {
+    $freshRequested = qa_get('fresh_intro');
+
+    // Ensure table exists
+    qa_db_query_raw(
+        'CREATE TABLE IF NOT EXISTS ^book_category_intros (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            bookname VARCHAR(255) NOT NULL,
+            category VARCHAR(255) NOT NULL,
+            content MEDIUMTEXT NOT NULL,
+            created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY book_cat (bookname, category)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+    );
+
+    if (!$freshRequested) {
+        $cached = qa_db_read_one_value(
+            qa_db_query_sub(
+                'SELECT content FROM ^book_category_intros WHERE bookname=$ AND category=$',
+                $bookname, $categoryName
+            ), true
+        );
+        if (!empty($cached)) {
+            return '<div class="category-intro">' . $cached . '</div>';
+        }
+    }
+
     $apiKey = qa_opt('openai_gemini_api_key');
     if (empty($apiKey)) return '';
 
@@ -899,6 +925,11 @@ function qa_book_generate_category_intro($categoryName, $topics) {
     $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
 
     if (empty($text)) return '';
+
+    qa_db_query_sub(
+        'INSERT INTO ^book_category_intros (bookname, category, content, created) VALUES ($, $, $, NOW()) ON DUPLICATE KEY UPDATE content=$, created=NOW()',
+        $bookname, $categoryName, $text, $text
+    );
 
     return '<div class="category-intro">' . $text . '</div>';
 }
@@ -1604,7 +1635,7 @@ foreach($cats as $cat) {
                 $topicsList[] = $t;
         }
         if (!empty($topicsList)) {
-            $categoryIntroHtml = qa_book_generate_category_intro($cat['title'], $topicsList);
+            $categoryIntroHtml = qa_book_generate_category_intro($cat['title'], $topicsList, $booknamesuffix);
         }
     }
 
