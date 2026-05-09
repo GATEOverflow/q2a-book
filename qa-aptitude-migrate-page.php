@@ -467,8 +467,8 @@ class qa_aptitude_migrate_page
             Migrate & Close All on Page (<?= count($openRows) ?>)
         </button>
         <button class="am-btn am-btn-all" onclick="amBulkAction('migrate_close_merge')"
-                style="background:#6a1b9a;" title="Migrate answers, merge CS tags onto branch, then close">
-            Migrate, Close & Merge All (<?= count($openRows) ?>)
+                style="background:#6a1b9a;" title="Merge answers/votes to branch, replace CS with redirect to branch">
+            Merge & Redirect All (<?= count($openRows) ?>)
         </button>
         <button class="am-btn am-btn-all" onclick="amBulkAction('close_only')"
                 style="background:#f44336;" title="Close all without migrating answers">
@@ -532,8 +532,8 @@ class qa_aptitude_migrate_page
                             </button>
                             <button class="am-btn am-btn-migrate" onclick="amAction(this, 'migrate_close_merge')"
                                     style="background:#6a1b9a;"
-                                    title="Migrate answers, merge CS tags onto branch, then close">
-                                Merge
+                                    title="Merge answers/votes to branch, delete CS and redirect visitors to branch">
+                                Merge & Redirect
                             </button>
                             <button class="am-btn am-btn-close" onclick="amAction(this, 'close_only')"
                                     title="Close CS copy without migrating (branch already has answers)">
@@ -592,7 +592,7 @@ class qa_aptitude_migrate_page
             var branch = row.getAttribute('data-branch');
 
             if (!confirm('Are you sure? This will ' +
-                (action === 'migrate_and_close' ? 'migrate answers and ' : action === 'migrate_close_merge' ? 'migrate answers, merge tags and ' : '') +
+                (action === 'migrate_and_close' ? 'migrate answers and ' : action === 'migrate_close_merge' ? 'merge answers/votes to branch, delete CS and redirect visitors. ' : '') +
                 'close CS question #' + csPostid + ' as duplicate.')) return;
 
             btn.disabled = true;
@@ -617,13 +617,13 @@ class qa_aptitude_migrate_page
                     } else {
                         amToast('Error: ' + (d.error || 'Unknown'), false);
                         btn.disabled = false;
-                        btn.textContent = action === 'migrate_and_close' ? 'Migrate & Close' : action === 'migrate_close_merge' ? 'Merge' : 'Close Only';
+                        btn.textContent = action === 'migrate_and_close' ? 'Migrate & Close' : action === 'migrate_close_merge' ? 'Merge & Redirect' : 'Close Only';
                     }
                 })
                 .catch(function(e) {
                     amToast('Network error: ' + e.message, false);
                     btn.disabled = false;
-                    btn.textContent = action === 'migrate_and_close' ? 'Migrate & Close' : action === 'migrate_close_merge' ? 'Merge' : 'Close Only';
+                    btn.textContent = action === 'migrate_and_close' ? 'Migrate & Close' : action === 'migrate_close_merge' ? 'Merge & Redirect' : 'Close Only';
                 });
         }
 
