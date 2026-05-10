@@ -1,13 +1,13 @@
 {
   "name": "Q2A Book",
+  "description": "Generates HTML/PDF books from Q2A site and provides a lazy-loaded book viewer with collapsible TOC, AJAX content loading, MathJax rendering, and click-to-reveal answer keys.",
   "uri": "https://github.com/gateoverflow/q2a-book",
-  "description": "Adds option to generate HTML/PDF from Q2A site",
-  "version": "1.2",
-  "date": "2016-12-16",
-  "author": "Noah, Arjun",
-  "author_uri": "http://armi.in/arjun",
+  "version": "2.0",
+  "date": "2026-05-10",
+  "author": "Noah, Arjun, Shaik Masthan",
+  "author_uri": "https://github.com/gateoverflow/",
   "license": "GPLv2",
   "update_uri": "https://raw.githubusercontent.com/gateoverflow/q2a-book/master/metadata.json",
   "min_q2a": "1.5",
-  "min_php": "5.1.6"
+  "load_order": "after_db_init"
 }

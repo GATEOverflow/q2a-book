@@ -16,6 +16,9 @@ qa_register_plugin_module('page', 'qa-topic-exams-page.php', 'qa_topic_exams_pag
 qa_register_plugin_module('page', 'qa-book-suggested-tags-page.php', 'qa_book_suggested_tags_page', 'Suggested Tags Page');
 qa_register_plugin_module('page', 'qa-aptitude-migrate-page.php', 'qa_aptitude_migrate_page', 'Aptitude Migration');
 
+qa_register_plugin_module('page', 'qa-book-viewer-page.php', 'qa_book_page', 'Book Viewer Page');
+qa_register_plugin_module('page', 'qa-book-viewer-ajax.php', 'qa_book_ajax', 'Book Viewer AJAX');
+
 qa_register_plugin_phrases('qa-book-lang-*.php', 'book');
 
 require 'util-book.php';
@@ -2388,6 +2391,7 @@ foreach($cats as $cat) {
         error_log('Q2A PDF Book Created on '.date('M j, Y \a\t H\:i\:s'));
     }
 
+    if (!function_exists('qa_get_user_name')) {
     function qa_get_user_name($uid) {
 
         $handles = qa_userids_to_handles(array($uid));
@@ -2414,6 +2418,7 @@ foreach($cats as $cat) {
         return strlen($handle) ? ('<A HREF="'.qa_path_absolute('user/'.$handle).
                 '" CLASS="qa-user-link">'.qa_html($name).'</A>') : 'Anonymous';
     }
+    } // end function_exists('qa_get_user_name')
 
 
     /*                              

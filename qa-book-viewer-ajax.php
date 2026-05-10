@@ -1,0 +1,245 @@
+<?php
+
+if (!defined('QA_VERSION')) {
+	header('Location: ../../../');
+	exit;
+}
+
+@ob_clean();
+
+class qa_book_ajax
+{
+	private $directory;
+	private $urltoroot;
+
+	public function load_module($directory, $urltoroot)
+	{
+		$this->directory = $directory;
+		$this->urltoroot = $urltoroot;
+	}
+
+	public function suggest_requests()
+	{
+		return array();
+	}
+
+	public function match_request($request)
+	{
+		return $request === 'book-ajax';
+	}
+
+	public function process_request($request)
+	{
+		header('Content-Type: application/json; charset=utf-8');
+
+		$book = qa_get('book');
+		$sectionId = qa_get('section');
+		$sectionType = qa_get('type');
+
+		if (empty($book) || empty($sectionId) || empty($sectionType)) {
+			echo json_encode(array('error' => 'Missing parameters'));
+			exit;
+		}
+
+		// Sanitize inputs
+		$book = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $book);
+		$sectionId = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $sectionId);
+		$sectionType = preg_replace('/[^a-z]/', '', $sectionType);
+
+		// html/ directory inside q2a-book plugin root
+		$filePath = $this->directory . 'html/' . $book . '.html';
+
+		if (!file_exists($filePath)) {
+			echo json_encode(array('error' => 'Book not found'));
+			exit;
+		}
+
+		$html = $this->extractSection($filePath, $sectionId, $sectionType);
+
+		echo json_encode(array(
+			'html' => $html,
+			'sectionId' => $sectionId,
+			'type' => $sectionType,
+		));
+
+		exit;
+	}
+
+	/**
+	 * Extract a section from the HTML file by its ID and type.
+	 */
+	private function extractSection($filePath, $sectionId, $type)
+	{
+		$content = file_get_contents($filePath);
+		if ($content === false) {
+			return '<p>Error reading file.</p>';
+		}
+
+		// Build answer key lookup from the full content
+		$answerKeys = $this->buildAnswerKeyMap($content);
+
+		switch ($type) {
+			case 'category':
+				return $this->extractCategory($content, $sectionId, $answerKeys);
+			case 'topic':
+				return $this->extractTopic($content, $sectionId, $answerKeys);
+			case 'question':
+				return $this->extractQuestion($content, $sectionId, $answerKeys);
+			default:
+				return '<p>Unknown section type.</p>';
+		}
+	}
+
+	/**
+	 * Parse all answer key tables and build a map: questionId => answer text
+	 */
+	private function buildAnswerKeyMap($content)
+	{
+		$map = array();
+		if (preg_match_all("/id='akt-(\d+)'[^>]*>.*?<\/td>\s*<td class='akt-key'>(.+?)<\/td>/s", $content, $matches, PREG_SET_ORDER)) {
+			foreach ($matches as $m) {
+				$qId = 'question' . $m[1];
+				$answerHtml = $m[2];
+				$answerText = strip_tags($answerHtml);
+				$answerText = trim($answerText);
+				if ($answerText !== '') {
+					$map[$qId] = $answerText;
+				}
+			}
+		}
+		return $map;
+	}
+
+	/**
+	 * Extract a category header (title + mark distribution) without questions.
+	 */
+	private function extractCategory($content, $catId, $answerKeys)
+	{
+		$idAttr = 'id="' . $catId . '"';
+		$pos = strpos($content, $idAttr);
+		if ($pos === false) {
+			return '<p>Section not found.</p>';
+		}
+
+		$catStart = strrpos(substr($content, 0, $pos), '<div class="category">');
+		if ($catStart === false) {
+			$catStart = strrpos(substr($content, 0, $pos), '<div class="cat-title">');
+		}
+
+		$chunk = substr($content, $catStart, 8000);
+
+		$titleEnd = strpos($chunk, '</div>', strpos($chunk, 'class="cat-title"'));
+		if ($titleEnd !== false) {
+			$titleEnd += 6;
+		}
+
+		$markStart = strpos($chunk, '<div class="cat-mark-distribution">');
+		$result = '';
+		if ($titleEnd !== false) {
+			$result = substr($chunk, 0, $titleEnd);
+		}
+
+		if ($markStart !== false) {
+			$markEnd = strpos($chunk, '</div>', $markStart);
+			if ($markEnd !== false) {
+				$result .= substr($chunk, $markStart, $markEnd - $markStart + 6);
+			}
+		}
+
+		return '<div class="category">' . $result . '</div>';
+	}
+
+	/**
+	 * Extract all questions under a topic.
+	 */
+	private function extractTopic($content, $topicId, $answerKeys)
+	{
+		$idAttr = 'id="' . $topicId . '"';
+		$pos = strpos($content, $idAttr);
+		if ($pos === false) {
+			return '<p>Section not found.</p>';
+		}
+
+		$blockStart = strrpos(substr($content, 0, $pos), '<div class="topic-block"');
+		if ($blockStart === false) {
+			return '<p>Section not found.</p>';
+		}
+
+		$remaining = substr($content, $blockStart);
+		$nextTopic = strpos($remaining, '<div class="topic-block"', 10);
+		$nextCat = strpos($remaining, '<div class="category">', 10);
+		$answerKeysSection = strpos($remaining, '<h2 class="answer-keys">', 10);
+
+		$endPos = strlen($remaining);
+		if ($nextTopic !== false) $endPos = min($endPos, $nextTopic);
+		if ($nextCat !== false) $endPos = min($endPos, $nextCat);
+		if ($answerKeysSection !== false) $endPos = min($endPos, $answerKeysSection);
+
+		$result = substr($remaining, 0, $endPos);
+		$result = $this->injectAnswerKeys($result, $answerKeys);
+
+		return '<div class="page"><div class="questions">' . $result . '</div></div>';
+	}
+
+	/**
+	 * Extract a single question with its answers.
+	 */
+	private function extractQuestion($content, $questionId, $answerKeys)
+	{
+		$idAttr = 'id="' . $questionId . '"';
+		$pos = strpos($content, $idAttr);
+		if ($pos === false) {
+			return '<p>Question not found.</p>';
+		}
+
+		$lookBack = min($pos, 1000);
+		$searchBack = substr($content, $pos - $lookBack, $lookBack);
+		$qStart = strrpos($searchBack, '<div class="question">');
+		if ($qStart === false) {
+			$qStart = strrpos($searchBack, '<div class="question-title">');
+			if ($qStart === false) {
+				return '<p>Question boundary not found.</p>';
+			}
+		}
+		$absoluteStart = ($pos - $lookBack) + $qStart;
+
+		$remaining = substr($content, $absoluteStart);
+
+		$nextQuestion = strpos($remaining, '<div class="question">', 10);
+		$nextTopic = strpos($remaining, '<div class="topic-block"', 10);
+		$nextCat = strpos($remaining, '<div class="category">', 10);
+		$nextAkt = strpos($remaining, '<h2 class="answer-keys">', 10);
+
+		$endPos = strlen($remaining);
+		if ($nextQuestion !== false) $endPos = min($endPos, $nextQuestion);
+		if ($nextTopic !== false) $endPos = min($endPos, $nextTopic);
+		if ($nextCat !== false) $endPos = min($endPos, $nextCat);
+		if ($nextAkt !== false) $endPos = min($endPos, $nextAkt);
+
+		$result = substr($remaining, 0, $endPos);
+		$result = $this->injectAnswerKeys($result, $answerKeys);
+
+		return '<div class="page"><div class="questions">' . $result . '</div></div>';
+	}
+
+	/**
+	 * Replace answer-link placeholders with actual answer key values.
+	 */
+	private function injectAnswerKeys($html, $answerKeys)
+	{
+		return preg_replace_callback(
+			'/<a\s+class="answer-link"\s+href="#akt-(\d+)"[^>]*>[^<]*<\/a>/',
+			function ($m) use ($answerKeys) {
+				$qId = 'question' . $m[1];
+				if (isset($answerKeys[$qId])) {
+					$answer = htmlspecialchars($answerKeys[$qId], ENT_QUOTES, 'UTF-8');
+					return '<span class="bv-answer-key"><span class="bv-answer-label">Answer:</span> '
+						. '<span class="bv-answer-value bv-answer-hidden" onclick="this.classList.toggle(\'bv-answer-hidden\')">'
+						. $answer . '</span></span>';
+				}
+				return $m[0];
+			},
+			$html
+		);
+	}
+}

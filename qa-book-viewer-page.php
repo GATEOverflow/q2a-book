@@ -1,0 +1,236 @@
+<?php
+
+if (!defined('QA_VERSION')) {
+	header('Location: ../../../');
+	exit;
+}
+
+class qa_book_page
+{
+	private $directory;
+	private $urltoroot;
+
+	public function load_module($directory, $urltoroot)
+	{
+		$this->directory = $directory;
+		$this->urltoroot = $urltoroot;
+	}
+
+	public function suggest_requests()
+	{
+		return array(
+			array(
+				'title' => 'Book Viewer',
+				'request' => 'book',
+				'nav' => 'M',
+			),
+		);
+	}
+
+	public function match_request($request)
+	{
+		return $request === 'book' || strpos($request, 'book/') === 0;
+	}
+
+	public function process_request($request)
+	{
+		$qa_content = qa_content_prepare();
+		$qa_content['title'] = 'GATE Overflow PYQ Book';
+
+		// Determine which book file to show
+		$parts = explode('/', $request);
+		$bookSlug = isset($parts[1]) ? $parts[1] : '';
+
+		// Scan html directory inside q2a-book plugin root
+		$htmlDir = $this->directory . 'html/';
+		$books = array();
+		if (is_dir($htmlDir)) {
+			$files = glob($htmlDir . '*.html');
+			foreach ($files as $file) {
+				$filename = basename($file, '.html');
+				$books[$filename] = $filename;
+			}
+		}
+
+		// Build the TOC index for the selected book
+		$selectedBook = '';
+		$tocJson = '[]';
+		if ($bookSlug && isset($books[$bookSlug])) {
+			$selectedBook = $bookSlug;
+			$tocJson = $this->buildTocJson($htmlDir . $bookSlug . '.html');
+		} elseif (count($books) === 1) {
+			$selectedBook = key($books);
+			$tocJson = $this->buildTocJson($htmlDir . $selectedBook . '.html');
+		}
+
+		// Build book selector dropdown
+		$bookOptions = '';
+		foreach ($books as $slug => $name) {
+			$sel = ($slug === $selectedBook) ? ' selected' : '';
+			$label = qa_html(str_replace('_', ' ', ucfirst($name)));
+			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . $label . '</option>';
+		}
+
+		$rootUrl = qa_path_html('book');
+		$ajaxUrl = qa_path_html('book-ajax');
+		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css');
+		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js');
+
+		$qa_content['custom'] = <<<HTML
+<link rel="stylesheet" href="{$cssUrl}">
+<script type="text/x-mathjax-config">
+	MathJax.Hub.Config({
+		tex2jax: {
+			inlineMath: [['\$','\$'], ['\\\\(','\\\\)']],
+			displayMath: [['\$\$','\$\$'], ['\\\\[','\\\\]']],
+			processEscapes: true
+		},
+		menuSettings: {CHTMLpreview: false},
+		skipStartupTypeset: true
+	});
+</script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<script async type="text/javascript" src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+<div id="book-viewer-app">
+	<div class="bv-toolbar">
+		<button id="bv-toggle-sidebar" onclick="BookViewer.toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+		<select id="bv-book-select" onchange="BookViewer.selectBook(this.value)">
+			<option value="">-- Select a Book --</option>
+			{$bookOptions}
+		</select>
+		<input type="text" id="bv-search" placeholder="Search sections..." oninput="BookViewer.filterToc(this.value)">
+		<input type="text" id="bv-tag-filter" placeholder="Filter by tag... e.g. gatecse-2009" oninput="BookViewer.filterByTag(this.value)">
+		<span id="bv-tag-count"></span>
+		<button id="bv-expand-all" onclick="BookViewer.expandAll()">Expand All</button>
+		<button id="bv-collapse-all" onclick="BookViewer.collapseAll()">Collapse All</button>
+		<button id="bv-fullscreen" onclick="BookViewer.toggleFullscreen()" title="Fullscreen">&#x26F6;</button>
+	</div>
+	<div class="bv-container">
+		<nav id="bv-sidebar" class="bv-sidebar">
+			<div id="bv-toc-tree"></div>
+		</nav>
+		<main id="bv-content" class="bv-content">
+			<div id="bv-content-area">
+				<p class="bv-placeholder">Select a section from the sidebar to view its content.</p>
+			</div>
+		</main>
+	</div>
+</div>
+<script>
+	var BookViewerConfig = {
+		ajaxUrl: '{$ajaxUrl}',
+		rootUrl: '{$rootUrl}',
+		selectedBook: '{$selectedBook}',
+		toc: {$tocJson}
+	};
+</script>
+<script src="{$jsUrl}"></script>
+HTML;
+
+		return $qa_content;
+	}
+
+	/**
+	 * Parse the HTML file and build a TOC structure as JSON.
+	 * Extracts categories, topics, and question titles with their line positions.
+	 */
+	private function buildTocJson($filePath)
+	{
+		if (!file_exists($filePath)) {
+			return '[]';
+		}
+
+		$cacheFile = $filePath . '.toc.json';
+		$fileModTime = filemtime($filePath);
+
+		// Use cached TOC if available and fresh
+		if (file_exists($cacheFile) && filemtime($cacheFile) >= $fileModTime) {
+			return file_get_contents($cacheFile);
+		}
+
+		$toc = array();
+		$handle = fopen($filePath, 'r');
+		if (!$handle) {
+			return '[]';
+		}
+
+		$lineNum = 0;
+		$catIdx = -1;
+		$topicIdx = -1;
+
+		while (($line = fgets($handle)) !== false) {
+			$lineNum++;
+
+			// Match category
+			if (strpos($line, 'class="cat-title"') !== false) {
+				if (preg_match('/id="(cat\d+)"/', $line, $idMatch) &&
+					preg_match('/<span class="number">(\d+)<\/span>\s*([^<]+)<\/a>/', $line, $nameMatch)) {
+					$toc[] = array(
+						'id' => $idMatch[1],
+						'number' => $nameMatch[1],
+						'title' => trim($nameMatch[2]),
+						'line' => $lineNum,
+						'type' => 'category',
+						'children' => array(),
+					);
+					$catIdx = count($toc) - 1;
+					$topicIdx = -1;
+				}
+			}
+
+			// Match topic
+			if (strpos($line, 'class="topic-block"') !== false) {
+				if (preg_match('/id="([^"]+)"/', $line, $idMatch) &&
+					preg_match('/<span class="number">([\d.]+)<\/span>\s*([^<]+)<\/a>/', $line, $nameMatch)) {
+
+					$count = '';
+					if (preg_match('/topic-title-count[^>]*>\s*\((\d+)\)/', $line, $cntMatch)) {
+						$count = $cntMatch[1];
+					}
+
+					$topic = array(
+						'id' => $idMatch[1],
+						'number' => $nameMatch[1],
+						'title' => trim($nameMatch[2]),
+						'count' => $count,
+						'line' => $lineNum,
+						'type' => 'topic',
+						'children' => array(),
+					);
+					if ($catIdx >= 0) {
+						$toc[$catIdx]['children'][] = $topic;
+						$topicIdx = count($toc[$catIdx]['children']) - 1;
+					}
+				}
+			}
+
+			// Match question
+			if (strpos($line, 'class="question-title"') !== false) {
+				if (preg_match('/id="(question\d+)"/', $line, $idMatch) &&
+					preg_match('/<span class="number">([\d.]+)<\/span>([^<]+)<\/a>/', $line, $nameMatch)) {
+					$question = array(
+						'id' => $idMatch[1],
+						'number' => $nameMatch[1],
+						'title' => trim($nameMatch[2]),
+						'line' => $lineNum,
+						'type' => 'question',
+					);
+					if ($catIdx >= 0 && $topicIdx >= 0) {
+						$toc[$catIdx]['children'][$topicIdx]['children'][] = $question;
+					} elseif ($catIdx >= 0) {
+						$toc[$catIdx]['children'][] = $question;
+					}
+				}
+			}
+		}
+
+		fclose($handle);
+
+		$json = json_encode($toc, JSON_UNESCAPED_UNICODE);
+
+		// Cache the TOC
+		@file_put_contents($cacheFile, $json);
+
+		return $json;
+	}
+}
