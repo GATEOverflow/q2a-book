@@ -9,6 +9,13 @@ function qa_get_request_content() {
 				return false;
 			}
 
+			// Only allow admins to generate/view the full book HTML
+			if (qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
+				header('HTTP/1.0 403 Forbidden');
+				echo 'Access denied. Use the book viewer at /book/ instead.';
+				return false;
+			}
+
 			if(qa_opt('book_plugin_static') && file_exists(qa_opt('book_plugin_loc'))) {
 				if(qa_opt('book_plugin_refresh') && ((qa_opt('book_plugin_refresh_time') && (int)qa_opt('book_plugin_refresh_hours')) || (qa_get('cron') == 'true' && qa_opt('book_plugin_refresh_cron'))) && time() > qa_opt('book_plugin_refresh_last')+(qa_opt('book_plugin_refresh_hours')*60*60)) {
 					qa_book_plugin_createBook();
@@ -36,6 +43,13 @@ function qa_get_request_content() {
 			return false;
 		}
 		else if(qa_opt('book_plugin_pdf') && $requestlower && $requestlower === qa_opt('book_plugin_request_pdf')) {
+			// Only allow admins to download the full PDF
+			if (qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
+				header('HTTP/1.0 403 Forbidden');
+				echo 'Access denied.';
+				return false;
+			}
+
 			if(qa_opt('book_plugin_static')) {
 
 				// refresh
