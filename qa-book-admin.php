@@ -301,7 +301,7 @@ class qa_book_admin {
 
 		// Text input to add a new full path
 		$addInput = '<div style="margin-top:8px">'
-			. '<input type="text" name="book_viewer_new_path" placeholder="html/BookName.html" style="width:60%;font-family:monospace">'
+			. '<input type="text" name="book_viewer_new_path" style="width:60%;font-family:monospace">'
 			. '&nbsp;<button type="submit" name="book_viewer_add_file" value="1" style="padding:4px 12px">Add Book</button>'
 			. '</div>';
 

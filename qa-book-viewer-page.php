@@ -56,7 +56,8 @@ class qa_book_page
 			$fullPath = $baseDir . $relPath;
 			if (file_exists($fullPath)) {
 				$slug = basename($relPath, '.html');
-				$books[$slug] = $slug;
+				$title = $this->extractBookTitle($fullPath, $slug);
+				$books[$slug] = $title;
 				$bookPaths[$slug] = $fullPath;
 			}
 		}
@@ -74,10 +75,9 @@ class qa_book_page
 
 		// Build book selector dropdown
 		$bookOptions = '';
-		foreach ($books as $slug => $name) {
+		foreach ($books as $slug => $title) {
 			$sel = ($slug === $selectedBook) ? ' selected' : '';
-			$label = qa_html(str_replace('_', ' ', ucfirst($name)));
-			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . $label . '</option>';
+			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . qa_html($title) . '</option>';
 		}
 
 		$rootUrl = qa_path_html('book');
@@ -137,6 +137,24 @@ class qa_book_page
 HTML;
 
 		return $qa_content;
+	}
+
+	/**
+	 * Extract the <title> from an HTML book file. Falls back to a humanized slug.
+	 */
+	private function extractBookTitle($filePath, $fallback)
+	{
+		$handle = fopen($filePath, 'r');
+		if (!$handle) return $fallback;
+
+		$chunk = fread($handle, 4096);
+		fclose($handle);
+
+		if (preg_match('/<title>([^<]+)<\/title>/i', $chunk, $m)) {
+			return trim($m[1]);
+		}
+
+		return str_replace('_', ' ', ucfirst($fallback));
 	}
 
 	/**
