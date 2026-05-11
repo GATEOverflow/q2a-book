@@ -130,7 +130,7 @@ class qa_book_ajax
 	}
 
 	/**
-	 * Extract a category header (title + mark distribution) without questions.
+	 * Extract a category header (title + mark distribution + category intro) without questions.
 	 */
 	private function extractCategory($content, $catId, $answerKeys)
 	{
@@ -145,7 +145,12 @@ class qa_book_ajax
 			$catStart = strrpos(substr($content, 0, $pos), '<div class="cat-title">');
 		}
 
-		$chunk = substr($content, $catStart, 8000);
+		// Find the end of this category's header area (up to first topic-block or next category)
+		$remaining = substr($content, $catStart);
+		$firstTopic = strpos($remaining, '<div class="topic-block"', 10);
+		$headerEnd = $firstTopic !== false ? $firstTopic : 8000;
+
+		$chunk = substr($remaining, 0, $headerEnd);
 
 		$titleEnd = strpos($chunk, '</div>', strpos($chunk, 'class="cat-title"'));
 		if ($titleEnd !== false) {
@@ -162,6 +167,36 @@ class qa_book_ajax
 			$markEnd = strpos($chunk, '</div>', $markStart);
 			if ($markEnd !== false) {
 				$result .= substr($chunk, $markStart, $markEnd - $markStart + 6);
+			}
+		}
+
+		// Extract category-intro if present
+		$introStart = strpos($chunk, '<div class="category-intro">');
+		if ($introStart !== false) {
+			// Find the matching closing </div> — the intro can be large
+			$introChunk = substr($remaining, $introStart, $headerEnd - $introStart);
+			// Find the closing </div> for category-intro by matching nesting
+			$depth = 0;
+			$introEnd = 0;
+			$searchPos = 0;
+			while ($searchPos < strlen($introChunk)) {
+				$nextOpen = strpos($introChunk, '<div', $searchPos);
+				$nextClose = strpos($introChunk, '</div>', $searchPos);
+				if ($nextClose === false) break;
+				if ($nextOpen !== false && $nextOpen < $nextClose) {
+					$depth++;
+					$searchPos = $nextOpen + 4;
+				} else {
+					$depth--;
+					if ($depth <= 0) {
+						$introEnd = $nextClose + 6;
+						break;
+					}
+					$searchPos = $nextClose + 6;
+				}
+			}
+			if ($introEnd > 0) {
+				$result .= substr($introChunk, 0, $introEnd);
 			}
 		}
 
