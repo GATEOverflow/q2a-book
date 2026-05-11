@@ -285,13 +285,13 @@ class qa_book_admin {
 			foreach ($allowedList as $idx => $ab) {
 				$abSafe = qa_html($ab);
 				$exists = file_exists($bookLocDir . $ab);
-				$status = $exists ? '<span style="color:green">&#10003;</span>' : '<span style="color:red">&#10007; not found</span>';
-				$allowedHtml .= '<tr style="border-bottom:1px solid #ddd">'
+				$status = $exists ? '<span style="color:#2ea44f">&#10003;</span>' : '<span style="color:#d73a49">&#10007; not found</span>';
+				$allowedHtml .= '<tr style="border-bottom:1px solid var(--divider-color, rgba(128,128,128,0.3))">'
 					. '<td style="padding:4px 8px">' . $status . '</td>'
 					. '<td style="padding:4px 8px;font-family:monospace;font-size:13px">' . $abSafe . '</td>'
 					. '<td style="padding:4px"><button type="submit" name="book_viewer_remove_file" value="1" '
 					. 'onclick="document.getElementById(\'book_viewer_remove_which\').value=\'' . qa_js($ab, true) . '\'" '
-					. 'style="color:red;cursor:pointer;border:1px solid #ccc;background:#fff;padding:2px 8px">Remove</button></td></tr>';
+					. 'style="color:#d73a49;cursor:pointer;border:1px solid currentColor;background:transparent;padding:2px 8px">Remove</button></td></tr>';
 			}
 			$allowedHtml .= '</table>';
 			$allowedHtml .= '<input type="hidden" name="book_viewer_remove_which" id="book_viewer_remove_which" value="">';
@@ -301,8 +301,8 @@ class qa_book_admin {
 
 		// Text input to add a new full path
 		$addInput = '<div style="margin-top:8px">'
-			. '<input type="text" name="book_viewer_new_path" style="width:60%;font-family:monospace">'
-			. '&nbsp;<button type="submit" name="book_viewer_add_file" value="1" style="padding:4px 12px">Add Book</button>'
+			. '<input type="text" name="book_viewer_new_path" style="width:60%;font-family:monospace;background:transparent;color:inherit;border:1px solid var(--divider-color, rgba(128,128,128,0.3));padding:4px 8px">'
+			. '&nbsp;<button type="submit" name="book_viewer_add_file" value="1" style="padding:4px 12px;background:transparent;color:inherit;border:1px solid var(--divider-color, rgba(128,128,128,0.3));cursor:pointer">Add Book</button>'
 			. '</div>';
 
 		$fields[] = array(
