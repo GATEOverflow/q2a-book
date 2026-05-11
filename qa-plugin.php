@@ -2150,6 +2150,7 @@ foreach($cats as $cat) {
         echo "Total Answers: ".$globalanswercount."<br>";
 
         $siteTitle = $bookTitle ? $bookTitle : qa_opt('site_title');
+        if ($volume) $siteTitle .= ' Volume ' . $volume;
         $book = str_replace('[book-title]',$siteTitle,$book);
         $book = str_replace('[site-url]',qa_network_get($branch),$book);
         $book = str_replace('[date]',date('M j, Y'),$book);
