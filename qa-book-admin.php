@@ -291,7 +291,7 @@ class qa_book_admin {
 					. '<td style="padding:4px 8px">' . $status . '</td>'
 					. '<td style="padding:4px 8px;font-family:monospace;font-size:13px">' . $abSafe . '</td>'
 					. '<td style="padding:4px"><button type="submit" name="book_viewer_remove_file" value="1" '
-					. 'onclick="document.getElementById(\'book_viewer_remove_which\').value=\'' . qa_js($ab, true) . '\'" '
+					. 'onclick="document.getElementById(\'book_viewer_remove_which\').value=\'' . addslashes($ab) . '\'" '
 					. 'style="color:#d73a49;cursor:pointer;border:1px solid currentColor;background:transparent;padding:2px 8px">Remove</button></td></tr>';
 			}
 			$allowedHtml .= '</table>';
