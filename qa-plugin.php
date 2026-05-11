@@ -1523,6 +1523,7 @@ foreach($cats as $cat) {
     $reqanswers = $book_plugin_req_ans;
     $introsuffix = '';
     $booknamesuffix = "book";
+    $bookTitle = '';
     for($i=1; $i <= 10; $i++) {
         //if(qa_opt('book_plugin_enable_custom_filter'.$i) || (qa_get('filter'.$i))){
         //if(qa_book_get('filter'.$i)){
@@ -1530,6 +1531,8 @@ foreach($cats as $cat) {
             $booknamesuffix .= "_filter$i";
             $incsql .= " and (".$filter[$i].")";
             $introsuffix.='<p>'. $filter_desc[$i].'</p>';
+            $ft = qa_book_get('book_plugin_custom_filter'.$i.'_title', true);
+            if ($ft) $bookTitle = $ft;
         }
     }
     $privatefilterstring=" qs.tags not like '%memorybased%' and qs.tags not like '%goclasses%' ";
@@ -2146,7 +2149,8 @@ foreach($cats as $cat) {
         echo "Total Questions: ".$globalquestioncount."<br>";
         echo "Total Answers: ".$globalanswercount."<br>";
 
-        $book = str_replace('[site-title]',qa_opt('site_title'),$book);
+        $siteTitle = $bookTitle ? $bookTitle : qa_opt('site_title');
+        $book = str_replace('[book-title]',$siteTitle,$book);
         $book = str_replace('[site-url]',qa_network_get($branch),$book);
         $book = str_replace('[date]',date('M j, Y'),$book);
         //file_put_contents("/tmp/out.txt",json_encode($topic_array),FILE_APPEND);

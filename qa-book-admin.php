@@ -181,6 +181,7 @@ class qa_book_admin {
 				qa_book_set('book_plugin_enable_custom_filter'.$i,(bool)qa_post_text('book_plugin_enable_custom_filter'.$i), true);
 				qa_book_set('book_plugin_custom_filter'.$i,qa_post_text('book_plugin_custom_filter'.$i), true);
 				qa_book_set('book_plugin_custom_filter'.$i.'_desc',qa_post_text('book_plugin_custom_filter'.$i.'_desc'), true);
+				qa_book_set('book_plugin_custom_filter'.$i.'_title',qa_post_text('book_plugin_custom_filter'.$i.'_title'), true);
 			}
 			qa_book_set('book_plugin_sort_q',(int)qa_post_text('book_plugin_sort_q'));
 
@@ -323,7 +324,8 @@ class qa_book_admin {
 				'type' => 'checkbox',
 			);
 			$fields[] = array(
-				'value' => '<div style="display:'.(qa_book_get('book_plugin_enable_custom_filter'.$i,true)?'block':'none').'" id="book_plugin_custom_filter'.$i.'_div"><i>Custom query filter'.$i.' string</i><br/><input name="book_plugin_custom_filter'.$i.'" id="book_plugin_custom_filter'.$i.'" value="'.qa_book_get('book_plugin_custom_filter'.$i, true).'">
+				'value' => '<div style="display:'.(qa_book_get('book_plugin_enable_custom_filter'.$i,true)?'block':'none').'" id="book_plugin_custom_filter'.$i.'_div"><i>Book Title (used in &lt;title&gt; tag)</i><br/><input name="book_plugin_custom_filter'.$i.'_title" id="book_plugin_custom_filter'.$i.'_title" value="'.qa_html(qa_book_get('book_plugin_custom_filter'.$i.'_title', true)).'" style="width:60%" placeholder="e.g. GATE CSE PYQ Book Vol '.$i.'">
+				<br/><br/><i>Custom query filter'.$i.' string</i><br/><input name="book_plugin_custom_filter'.$i.'" id="book_plugin_custom_filter'.$i.'" value="'.qa_book_get('book_plugin_custom_filter'.$i, true).'">
 				<br/><i>Text to be added in Book</i><br/><textarea name="book_plugin_custom_filter'.$i.'_desc"  rows="10" id="book_plugin_custom_filter'.$i.'_desc">'.qa_book_get('book_plugin_custom_filter'.$i.'_desc', true).'</textarea>
 				</div>',
 			'type' => 'static',
