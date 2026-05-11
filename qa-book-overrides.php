@@ -10,7 +10,8 @@ function qa_get_request_content() {
 			}
 
 			// Only allow admins to generate/view the full book HTML
-			if (qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
+			// Cron requests (from localhost wget) bypass this check
+			if (qa_get('cron') != 'true' && qa_get_logged_in_level() < QA_USER_LEVEL_ADMIN) {
 				header('HTTP/1.0 403 Forbidden');
 				echo 'Access denied. Use the book viewer at /book/ instead.';
 				return false;
