@@ -144,7 +144,33 @@ class qa_book_admin {
 
 		$ok = null;
 
-		if (qa_clicked('book_plugin_process') || qa_clicked('book_plugin_save')) {
+		if (qa_clicked('book_viewer_add_file')) {
+			// Add a relative book file path to the allowed list
+			$newPath = trim(qa_post_text('book_viewer_new_path'));
+			if (strlen($newPath) && substr($newPath, -5) === '.html') {
+				$existing = qa_book_get('book_viewer_allowed_books');
+				$list = $existing ? array_filter(array_map('trim', explode("\n", $existing))) : array();
+				if (!in_array($newPath, $list)) {
+					$list[] = $newPath;
+					qa_book_set('book_viewer_allowed_books', implode("\n", $list));
+				}
+				$ok = 'Book file added';
+			} else {
+				$ok = 'Invalid path — must be a relative path ending in .html';
+			}
+		}
+		else if (qa_clicked('book_viewer_remove_file')) {
+			// Remove a book file path from the allowed list
+			$removeFile = qa_post_text('book_viewer_remove_which');
+			if (strlen($removeFile)) {
+				$existing = qa_book_get('book_viewer_allowed_books');
+				$list = $existing ? array_filter(array_map('trim', explode("\n", $existing))) : array();
+				$list = array_values(array_diff($list, array($removeFile)));
+				qa_book_set('book_viewer_allowed_books', implode("\n", $list));
+			}
+			$ok = 'Book file removed';
+		}
+		else if (qa_clicked('book_plugin_process') || qa_clicked('book_plugin_save')) {
 
 			qa_opt('book_plugin_active',(bool)qa_post_text('book_plugin_active'));
 			qa_book_set('book_plugin_shuffle',(bool)qa_post_text('book_plugin_shuffle'));
@@ -238,6 +264,57 @@ class qa_book_admin {
 		$fields[] = array(
 			'type' => 'blank',
 		);
+
+		// --- Book Viewer: allowed book file paths ---
+		$bookLoc = qa_book_get('book_plugin_loc');
+		$siteSlug = strtolower(str_replace(' ', '_', qa_opt('site_title')));
+		$bookLocDir = ($bookLoc ? $bookLoc : dirname(__FILE__) . '/book') . '/' . $siteSlug . '/';
+
+		$fields[] = array(
+			'value' => '<h3>Book Viewer Settings</h3><p><i>Add relative paths to HTML book files (relative to <code>' . qa_html($bookLocDir) . '</code>). e.g. <code>html/Discrete.html</code></i></p>',
+			'type' => 'static',
+		);
+
+		$allowedRaw = qa_book_get('book_viewer_allowed_books');
+		$allowedList = $allowedRaw ? array_filter(array_map('trim', explode("\n", $allowedRaw))) : array();
+
+		// Show currently allowed books with remove buttons
+		$allowedHtml = '';
+		if (count($allowedList)) {
+			$allowedHtml .= '<table style="margin-bottom:10px;border-collapse:collapse">';
+			foreach ($allowedList as $idx => $ab) {
+				$abSafe = qa_html($ab);
+				$exists = file_exists($bookLocDir . $ab);
+				$status = $exists ? '<span style="color:green">&#10003;</span>' : '<span style="color:red">&#10007; not found</span>';
+				$allowedHtml .= '<tr style="border-bottom:1px solid #ddd">'
+					. '<td style="padding:4px 8px">' . $status . '</td>'
+					. '<td style="padding:4px 8px;font-family:monospace;font-size:13px">' . $abSafe . '</td>'
+					. '<td style="padding:4px"><button type="submit" name="book_viewer_remove_file" value="1" '
+					. 'onclick="document.getElementById(\'book_viewer_remove_which\').value=\'' . qa_js($ab, true) . '\'" '
+					. 'style="color:red;cursor:pointer;border:1px solid #ccc;background:#fff;padding:2px 8px">Remove</button></td></tr>';
+			}
+			$allowedHtml .= '</table>';
+			$allowedHtml .= '<input type="hidden" name="book_viewer_remove_which" id="book_viewer_remove_which" value="">';
+		} else {
+			$allowedHtml .= '<p><i>No books added yet.</i></p>';
+		}
+
+		// Text input to add a new full path
+		$addInput = '<div style="margin-top:8px">'
+			. '<input type="text" name="book_viewer_new_path" placeholder="html/BookName.html" style="width:60%;font-family:monospace">'
+			. '&nbsp;<button type="submit" name="book_viewer_add_file" value="1" style="padding:4px 12px">Add Book</button>'
+			. '</div>';
+
+		$fields[] = array(
+			'value' => '<b>Allowed Books in Viewer:</b>' . $allowedHtml . $addInput,
+			'type' => 'static',
+		);
+
+		$fields[] = array(
+			'type' => 'blank',
+		);
+		// --- End Book Viewer settings ---
+
 		for($i = 1; $i <= 10; $i++) {
 			$fields[] = array(
 				'label' => 'Enable Custom Filter '.$i,

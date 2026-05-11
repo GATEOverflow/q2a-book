@@ -41,14 +41,23 @@ class qa_book_page
 		$parts = explode('/', $request);
 		$bookSlug = isset($parts[1]) ? $parts[1] : '';
 
-		// Scan html directory inside q2a-book plugin root
-		$htmlDir = $this->directory . 'html/';
+		// Base directory is the book file write directory
+		$bookLoc = qa_book_get('book_plugin_loc');
+		$siteSlug = strtolower(str_replace(' ', '_', qa_opt('site_title')));
+		$baseDir = ($bookLoc ? $bookLoc : $this->directory . 'book') . '/' . $siteSlug . '/';
+
+		// Allowed book relative paths (relative to baseDir)
+		$allowedRaw = qa_book_get('book_viewer_allowed_books');
+		$allowedList = $allowedRaw ? array_filter(array_map('trim', explode("\n", $allowedRaw))) : array();
+
 		$books = array();
-		if (is_dir($htmlDir)) {
-			$files = glob($htmlDir . '*.html');
-			foreach ($files as $file) {
-				$filename = basename($file, '.html');
-				$books[$filename] = $filename;
+		$bookPaths = array();
+		foreach ($allowedList as $relPath) {
+			$fullPath = $baseDir . $relPath;
+			if (file_exists($fullPath)) {
+				$slug = basename($relPath, '.html');
+				$books[$slug] = $slug;
+				$bookPaths[$slug] = $fullPath;
 			}
 		}
 
@@ -57,10 +66,10 @@ class qa_book_page
 		$tocJson = '[]';
 		if ($bookSlug && isset($books[$bookSlug])) {
 			$selectedBook = $bookSlug;
-			$tocJson = $this->buildTocJson($htmlDir . $bookSlug . '.html');
+			$tocJson = $this->buildTocJson($bookPaths[$bookSlug]);
 		} elseif (count($books) === 1) {
 			$selectedBook = key($books);
-			$tocJson = $this->buildTocJson($htmlDir . $selectedBook . '.html');
+			$tocJson = $this->buildTocJson($bookPaths[$selectedBook]);
 		}
 
 		// Build book selector dropdown

@@ -46,8 +46,27 @@ class qa_book_ajax
 		$sectionId = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $sectionId);
 		$sectionType = preg_replace('/[^a-z]/', '', $sectionType);
 
-		// html/ directory inside q2a-book plugin root
-		$filePath = $this->directory . 'html/' . $book . '.html';
+		// Base directory is the book file write directory
+		$bookLoc = qa_book_get('book_plugin_loc');
+		$siteSlug = strtolower(str_replace(' ', '_', qa_opt('site_title')));
+		$baseDir = ($bookLoc ? $bookLoc : $this->directory . 'book') . '/' . $siteSlug . '/';
+
+		// Resolve book slug to path via allowed list (relative to baseDir)
+		$allowedRaw = qa_book_get('book_viewer_allowed_books');
+		$allowedList = $allowedRaw ? array_filter(array_map('trim', explode("\n", $allowedRaw))) : array();
+
+		$filePath = '';
+		foreach ($allowedList as $relPath) {
+			if (basename($relPath, '.html') === $book) {
+				$filePath = $baseDir . $relPath;
+				break;
+			}
+		}
+
+		if (!$filePath) {
+			echo json_encode(array('error' => 'Book not available'));
+			exit;
+		}
 
 		if (!file_exists($filePath)) {
 			echo json_encode(array('error' => 'Book not found'));
