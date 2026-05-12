@@ -13,6 +13,10 @@ class qa_book_admin {
                         ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
 		}
 
+		if (!in_array(qa_db_add_table_prefix('book_category_intros'), $tablescreated)) {
+			$queries[] = qa_book_category_intro_table_query();
+		}
+
 		return $queries;
 	}
 

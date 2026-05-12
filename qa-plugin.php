@@ -24,6 +24,17 @@ qa_register_plugin_phrases('qa-book-lang-*.php', 'book');
 require 'util-book.php';
 require_once QA_INCLUDE_DIR.'/app/format.php';
 
+function qa_book_category_intro_table_query() {
+    return 'CREATE TABLE IF NOT EXISTS ^book_category_intros (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        bookname VARCHAR(255) NOT NULL,
+        category VARCHAR(255) NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY book_cat (bookname, category)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+}
+
 function qa_network_get($branch) {
     if(!$branch) {
         return qa_opt('site_url');
@@ -852,16 +863,7 @@ function qa_book_generate_category_intro($categoryName, $topics, $bookname) {
     $freshRequested = qa_get('fresh_intro');
 
     // Ensure table exists
-    qa_db_query_raw(
-        'CREATE TABLE IF NOT EXISTS ^book_category_intros (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            bookname VARCHAR(255) NOT NULL,
-            category VARCHAR(255) NOT NULL,
-            content MEDIUMTEXT NOT NULL,
-            created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY book_cat (bookname, category)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
-    );
+    qa_db_query_sub(qa_book_category_intro_table_query());
 
     if (!$freshRequested) {
         $cached = qa_db_read_one_value(
