@@ -420,6 +420,16 @@ html:not([data-theme="light"]) #bv-content-area .question {
 	position: relative;
 }
 
+.bv-answer-value.bv-answer-hidden .bv-answer-link {
+	display: none;
+}
+
+.bv-answer-link {
+	text-decoration: none;
+	margin-left: 4px;
+	font-size: 14px;
+}
+
 /* Hide the old answer-link that pointed to akt table */
 #bv-content-area .answer-link {
 	display: none;

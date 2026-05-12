@@ -122,7 +122,11 @@ class qa_book_ajax
 				$answerText = strip_tags($answerHtml);
 				$answerText = trim($answerText);
 				if ($answerText !== '') {
-					$map[$qId] = $answerText;
+					$href = '';
+					if (preg_match("/href=['\"]([^'\"]+)['\"]/", $answerHtml, $hm)) {
+						$href = $hm[1];
+					}
+					$map[$qId] = array('text' => $answerText, 'href' => $href);
 				}
 			}
 		}
@@ -286,10 +290,21 @@ class qa_book_ajax
 			function ($m) use ($answerKeys) {
 				$qId = 'question' . $m[1];
 				if (isset($answerKeys[$qId])) {
-					$answer = htmlspecialchars($answerKeys[$qId], ENT_QUOTES, 'UTF-8');
+					$entry = $answerKeys[$qId];
+					$answerText = $entry['text'];
+					$href = $entry['href'];
+					if ($answerText === 'N/A') {
+						return '';
+					}
+					$answer = htmlspecialchars($answerText, ENT_QUOTES, 'UTF-8');
+					$linkHtml = '';
+					if ($href !== '') {
+						$safeHref = htmlspecialchars($href, ENT_QUOTES, 'UTF-8');
+						$linkHtml = ' <a class="bv-answer-link" href="' . $safeHref . '" target="_blank" title="View answer">&#128279;</a>';
+					}
 					return '<span class="bv-answer-key"><span class="bv-answer-label">Answer:</span> '
-						. '<span class="bv-answer-value bv-answer-hidden" onclick="this.classList.toggle(\'bv-answer-hidden\')">'
-						. $answer . '</span></span>';
+						. '<span class="bv-answer-value bv-answer-hidden" onclick="this.classList.toggle(\'bv-answer-hidden\')">' 
+						. $answer . $linkHtml . '</span></span>';
 				}
 				return $m[0];
 			},
