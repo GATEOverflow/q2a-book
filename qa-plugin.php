@@ -2025,7 +2025,7 @@ foreach($cats as $cat) {
                 //if($acount <= 1)//arjun
                 {
                     $answerkeys[$nnumber]['postid'] = $q['postid'];
-                    $answerkeys[$nnumber]['apostid'] = $q['apostid'];
+                    $answerkeys[$nnumber]['apostid'] = $q['selected'] ? $q['selected'] : $baid;
                     $answerkeys[$nnumber]['key']	= $answerkey;
                 }
                 if($as != '')
