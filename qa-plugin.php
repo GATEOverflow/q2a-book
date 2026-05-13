@@ -1647,6 +1647,23 @@ foreach($cats as $cat) {
         }
     }
 
+    // Pre-fetch topic exams for this category's subject
+    $catTitle = $cat['title'];
+    // Extract subject name (before ": " if parent:child format)
+    $subjectForExam = (strpos($catTitle, ': ') !== false) ? explode(': ', $catTitle)[0] : $catTitle;
+    $topicExamsMap = [];
+    $topicExamRows = qa_db_read_all_assoc(qa_db_query_sub(
+        "SELECT postid, title, total_qs FROM ^exams WHERE title LIKE $ AND type = 'E' ORDER BY title",
+        '%| ' . $subjectForExam . ' |%'
+    ));
+    foreach ($topicExamRows as $te) {
+        $teParts = array_map('trim', explode('|', $te['title']));
+        if (count($teParts) >= 4) {
+            $teTopic = $teParts[2];
+            $topicExamsMap[$teTopic][] = $te;
+        }
+    }
+
     foreach($q2 as $qs) {
         usort($qs, "mysortanswers");
         // toc entry
@@ -1685,6 +1702,21 @@ foreach($cats as $cat) {
                 $topic = str_replace("[tlink]", gettag($mint),  $topic);	
                 $topic = str_replace("[top-link]", $catanchor,  $topic);	
                 $qhtml .= $topic;
+                // Add topic exam link if exists
+                if (isset($topicExamsMap[$mint])) {
+                    $teList = $topicExamsMap[$mint];
+                    $teCount = count($teList);
+                    $qhtml .= '<div class="topic-exam-link" style="margin:8px 0 12px 0;padding:8px 14px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1px solid #a5d6a7;border-radius:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.9em;">';
+                    $qhtml .= '<span style="font-size:1.1em;">&#9997;</span> ';
+                    $qhtml .= '<span style="font-weight:600;color:#2e7d32;">Practice Test' . ($teCount > 1 ? 's' : '') . ':</span> ';
+                    foreach ($teList as $tei => $teItem) {
+                        $teParts = array_map('trim', explode('|', $teItem['title']));
+                        $teLabel = isset($teParts[3]) ? $teParts[3] : 'Test ' . ($tei + 1);
+                        $qhtml .= '<a class="topic-exam-btn" href="' . qa_path_html('iexams/' . $teItem['postid']) . '" style="display:inline-block;padding:4px 10px;background:#fff;border:1px solid #4caf50;border-radius:4px;color:#2e7d32;text-decoration:none;font-weight:500;font-size:0.88em;transition:background 0.2s;">'
+                            . qa_html($teLabel) . ' <span style="color:#666;font-size:0.9em;">(' . $teItem['total_qs'] . 'Q)</span></a> ';
+                    }
+                    $qhtml .= '</div>';
+                }
                 //$toc.=str_replace('[qlink]','<a href="#question'.$qs[0]['postid'].'">'.$mint.'</a>',qa_opt('book_plugin_template_toc'));
                 //$toc.=str_replace('[qlink]','<div class="toc-col1"><a href="#topic'.gettag($mint).'">'.$mint.'</a></div><div class="toc-col2"> ('.$qtopiccount.')</div>',qa_opt('book_plugin_template_toc'));
                 $toc = str_replace("[zzzqcount]", $qcount, $toc);
