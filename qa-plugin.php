@@ -774,6 +774,207 @@ function qa_book_generate_tag_suggestions($filterCatIds = null, $dryrun = false,
 }
 
 /**
+ * Generate tag suggestions for questions with no mintag (unclassified) using Gemini.
+ * Asks Gemini to suggest 1-3 specific subtopic tags for each unclassified question.
+ *
+ * @param array|null $filterCatIds Limit to specific category IDs
+ * @param bool $dryrun If true, don't store — just return what would be suggested
+ * @param int $maxPerRun Maximum suggestions to generate per run
+ * @param string $tagFilter Required tag filter (e.g. 'gate')
+ * @param string $customFilter Additional SQL WHERE clause
+ * @return array ['count' => int, 'log' => array]
+ */
+function qa_book_suggest_unclassified_tags($filterCatIds = null, $dryrun = false, $maxPerRun = 50, $tagFilter = 'gate', $customFilter = '') {
+    set_time_limit(300);
+    $log = [];
+    $count = 0;
+    $startTime = time();
+    $apiKey = qa_opt('openai_gemini_api_key');
+
+    if (empty($apiKey)) {
+        return ['count' => 0, 'log' => [['postid' => 0, 'title' => 'ERROR', 'tags' => '', 'suggested' => '', 'reason' => 'Gemini API key not configured']]];
+    }
+
+    $cats = [];
+    qa_book_getallcats($cats);
+
+    $tagFilterSql = '';
+    if (!empty($tagFilter)) {
+        $tagFilterSql = " AND qs.tags LIKE '%" . qa_db_escape_string($tagFilter) . "%'";
+    }
+    $customFilterSql = '';
+    if (!empty($customFilter)) {
+        $customFilterSql = " AND (" . $customFilter . ")";
+    }
+
+    foreach ($cats as $cat) {
+        $categoryid = (int) $cat['categoryid'];
+        if ($filterCatIds !== null && !in_array($categoryid, $filterCatIds)) continue;
+        if ($count >= $maxPerRun || (time() - $startTime) > 120) break;
+
+        $questions = qa_db_read_all_assoc(qa_db_query_sub(
+            "SELECT qs.postid, BINARY qs.title AS title, qs.tags, qs.content
+             FROM ^posts qs
+             WHERE qs.type='Q' AND qs.closedbyid IS NULL AND qs.categoryid=#
+               AND qs.tags NOT LIKE '%usermod%'
+               AND qs.tags NOT LIKE '%usergate%'
+               AND qs.tags NOT LIKE '%memorybased%'
+               AND qs.tags NOT LIKE '%goclasses%'" . $tagFilterSql . $customFilterSql . "
+             ORDER BY qs.netvotes DESC, qs.created ASC",
+            $categoryid
+        ));
+
+        // Collect only unclassified questions (mintag returns '')
+        $unclassified = [];
+        foreach ($questions as $q) {
+            if (mintag($q) !== '') continue;
+            if ($count + count($unclassified) >= $maxPerRun) break;
+
+            // Skip if a pending suggestion already exists
+            $existing = qa_db_read_one_value(qa_db_query_sub(
+                "SELECT COUNT(*) FROM ^tag_suggestions WHERE postid=# AND status IS NULL",
+                (int) $q['postid']
+            ), true);
+            if ($existing > 0) continue;
+
+            $unclassified[] = [
+                'qid'     => (int) $q['postid'],
+                'title'   => $q['title'],
+                'content' => mb_substr(strip_tags((string) $q['content']), 0, 1200),
+                'tags'    => $q['tags'],
+            ];
+        }
+
+        if (empty($unclassified)) continue;
+
+        // Ask Gemini in batches of 5
+        foreach (array_chunk($unclassified, 5) as $batch) {
+            if ($count >= $maxPerRun || (time() - $startTime) > 120) break 2;
+
+            $geminiResult = qa_book_new_tags_gemini($apiKey, $batch, $cat['title']);
+
+            foreach ($batch as $idx => $item) {
+                if ($count >= $maxPerRun) break;
+                $suggestedTags = $geminiResult[$idx] ?? [];
+                foreach ($suggestedTags as $tag) {
+                    if ($count >= $maxPerRun) break;
+                    if (!$dryrun) {
+                        qa_db_query_sub(
+                            "INSERT INTO ^tag_suggestions (postid, suggested_tags, source, created) VALUES (#, $, $, NOW())",
+                            $item['qid'], $tag, 'unclassified-gemini'
+                        );
+                    }
+                    $count++;
+                    $log[] = [
+                        'postid'    => $item['qid'],
+                        'title'     => $item['title'],
+                        'tags'      => $item['tags'],
+                        'suggested' => $tag,
+                        'reason'    => 'Gemini new tag for unclassified question',
+                    ];
+                }
+                if (empty($suggestedTags)) {
+                    $log[] = [
+                        'postid'    => $item['qid'],
+                        'title'     => $item['title'],
+                        'tags'      => $item['tags'],
+                        'suggested' => '',
+                        'reason'    => 'Gemini: no tag suggested (unclassified)',
+                    ];
+                }
+            }
+        }
+    }
+
+    return ['count' => $count, 'log' => $log];
+}
+
+/**
+ * Call Gemini to suggest NEW specific subtopic tags for unclassified questions.
+ * Unlike qa_book_verify_tags_gemini (which validates candidates), this generates from scratch.
+ *
+ * @param string $apiKey
+ * @param array $batch items with 'title', 'content', 'tags'
+ * @param string $subject Subject/category name for context
+ * @return array Indexed array of arrays (suggested tag lists per question)
+ */
+function qa_book_new_tags_gemini($apiKey, $batch, $subject = '') {
+    $questions = [];
+    foreach ($batch as $idx => $item) {
+        $questions[] = [
+            'index'         => $idx,
+            'title'         => $item['title'],
+            'question_text' => $item['content'],
+            'current_tags'  => $item['tags'],
+        ];
+    }
+
+    $subjectCtx = $subject ? " The questions are from the subject: \"$subject\"." : '';
+    $prompt = "You are a computer science subject expert helping categorize GATE exam questions.$subjectCtx\n\n"
+        . "Each question below currently has no identifiable specific subtopic tag."
+        . " For each question, suggest 1 to 3 specific subtopic tags that best describe the exact concept tested.\n\n"
+        . "Rules:\n"
+        . "- Tags must be specific subtopic names, not broad subjects (e.g. 'binary-search-tree', not 'data-structures').\n"
+        . "- Use lowercase-hyphenated format (e.g. 'page-replacement', 'context-free-grammar').\n"
+        . "- Only suggest tags for concepts directly and specifically tested by the question.\n"
+        . "- If the question is too generic or cannot be classified, return an empty array.\n\n"
+        . "Questions:\n" . json_encode($questions, JSON_PRETTY_PRINT) . "\n\n"
+        . "Respond with a JSON array: [{\"index\": 0, \"suggested_tags\": [\"tag1\", \"tag2\"]}, ...]\n"
+        . "Only return the JSON array, nothing else.";
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode($apiKey);
+    $data = [
+        'contents'        => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+        'generationConfig' => [
+            'temperature'       => 0.2,
+            'maxOutputTokens'   => 2000,
+            'responseMimeType'  => 'application/json',
+        ],
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $results = array_fill(0, count($batch), []);
+    if ($httpCode !== 200 || empty($response)) return $results;
+
+    $decoded = json_decode($response, true);
+    $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
+    $parsed = json_decode($text, true);
+
+    if (is_array($parsed)) {
+        foreach ($parsed as $item) {
+            $idx = $item['index'] ?? null;
+            if ($idx !== null && isset($results[$idx]) && is_array($item['suggested_tags'] ?? null)) {
+                // Basic sanitisation: lowercase-hyphenated slugs only
+                $safe = [];
+                foreach ($item['suggested_tags'] as $tag) {
+                    $tag = preg_replace('/[^a-z0-9\-]/', '-', strtolower(trim($tag)));
+                    $tag = trim($tag, '-');
+                    if (strlen($tag) >= 3 && strlen($tag) <= 80) {
+                        $safe[] = $tag;
+                    }
+                }
+                $results[$idx] = array_slice($safe, 0, 3);
+            }
+        }
+    }
+
+    return $results;
+}
+
+/**
  * Call Gemini API to verify which candidate tags are relevant for given questions.
  * Sends full question text and a list of possible tags; Gemini decides purely on content.
  *
@@ -1262,6 +1463,11 @@ function qa_book_plugin_createBook($return=false) {
 
         $result = qa_book_generate_tag_suggestions($filterCatIds, $dryrun, $maxPerRun, $tagFilter, $customFilter);
 
+        // Also suggest tags for unclassified questions (no mintag) via Gemini
+        $resultUnclassified = qa_book_suggest_unclassified_tags($filterCatIds, $dryrun, $maxPerRun - $result['count'], $tagFilter, $customFilter);
+        $result['count'] += $resultUnclassified['count'];
+        $result['log'] = array_merge($result['log'], $resultUnclassified['log']);
+
         $html = '<h2>' . ($dryrun ? 'Dry run: would generate' : 'Generated') . ' ' . $result['count'] . ' tag suggestions</h2>';
         if ($dryrun) {
             $html .= '<p><em>Dry run — nothing stored.</em> <a href="' . qa_path('book', array('suggest_tags' => 1) + ($catidParam ? array('catid' => $catidParam) : array())) . '">Run for real</a></p>';
@@ -1628,6 +1834,7 @@ foreach($cats as $cat) {
     $oldmint='';	
     $answers='';//for pushing answers
     $tcount = 0;
+    $noTopicBlockEmitted = false; // tracks whether "No Classified Topic" block has been emitted
     $answerblockprefix = '<h2 class="answers-block">Answers: <a class="topic-link" href="#'.$cat['categoryid'].'_topic_[topic]">[topicname]</a></h2>';
     $topicblockprefix = '<div class="topic-block" id="'.$cat['categoryid'].'_topic_[tlink]"><h2 class="top-title"><a class="topic-link" href="'.qa_network_get($branch).'tag/[topicurl]"> [topic] </a> <span class="topic-title-count"> ([topic-count])</span> </h2> <a class="top-link" href=#[top-link]>top</a> </div>';
     $qtopiccount = 1;
@@ -1669,6 +1876,32 @@ foreach($cats as $cat) {
         // toc entry
         $cqcount++;
         $mint = mintag($qs[0]);
+
+        // Emit "No Classified Topic" block (topic 1) on first unclassified question
+        if ($mint === '' && !$noTopicBlockEmitted && !$shuffle) {
+            if (!$skipanswers && qa_book_get('book_plugin_push_a') && $answers !== '') {
+                if (!$hideanswers) {
+                    $qhtml .= qa_book_answerblockprefix($oldmint, $answerblockprefix) . $answers;
+                }
+                $answers = '';
+            }
+            $tcount++;
+            $topicanchor = $cat['categoryid'] . '_topic_no-classified-topic';
+            $number = "<span class=\"number\">" . $ccount . "." . $tcount . "</span>";
+            $qhtml = str_replace("[zzzqcount]", $qcount, $qhtml);
+            $qhtml .= '<div class="topic-block" id="' . $topicanchor . '">'
+                . '<h2 class="top-title"><span class="topic-link"> ' . $number . ' No Classified Topic </span>'
+                . ' <span class="topic-title-count"> ([zzzqcount])</span></h2>'
+                . ' <a class="top-link" href=#' . $catanchor . '>top</a></div>';
+            $toc = str_replace("[zzzqcount]", $qcount, $toc);
+            $toc .= str_replace('[qlink]',
+                '<div class="toc-col1"><a href="#' . $topicanchor . '">No Classified Topic</a></div><div class="toc-col2"> ([zzzqcount])</div>',
+                qa_book_get('book_plugin_template_toc'));
+            $qcount = 0;
+            $noTopicBlockEmitted = true;
+            $oldmint = ''; // keep as '' so the existing $mint !== $oldmint block stays a no-op for ''
+        }
+
         if($mint !== $oldmint){
             if($oldmint == '' &&!$shuffle)
             {
