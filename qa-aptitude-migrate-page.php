@@ -304,17 +304,27 @@ class qa_aptitude_migrate_page
                     other.netvotes AS branch_votes
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.title = cs.title
-               AND other.branch != 'cs' AND other.type = 'Q'
+               ON other.type = 'Q' AND other.branch != 'cs'
                AND (
-                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
-                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
+                   (other.branch = 'ec' AND (cs.title LIKE 'GATE%EC-%' OR cs.title LIKE 'GATE% EC:%' OR cs.title LIKE 'GATE ECE %')) OR
+                   (other.branch = 'ee' AND (cs.title LIKE 'GATE%EE-%' OR cs.title LIKE 'GATE% EE:%' OR cs.title LIKE 'GATE Electrical %')) OR
+                   (other.branch = 'me' AND (cs.title LIKE 'GATE%ME-%' OR cs.title LIKE 'GATE% ME:%' OR cs.title LIKE 'GATE Mechanical %')) OR
+                   (other.branch = 'ce' AND (cs.title LIKE 'GATE%CE-%' OR cs.title LIKE 'GATE% CE:%' OR cs.title LIKE 'GATE Civil %')) OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE%CH-%' OR cs.title LIKE 'GATE% CH:%' OR cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND (cs.title LIKE 'GATE%IN-%' OR cs.title LIKE 'GATE% IN:%' OR cs.title LIKE 'GATE IN %')) OR
+                   (other.branch = 'bt' AND (cs.title LIKE 'GATE%BT-%' OR cs.title LIKE 'GATE% BT:%' OR cs.title LIKE 'GATE BT %'))
                )
+               AND REGEXP_SUBSTR(cs.title, '20[0-9]{2}') = REGEXP_SUBSTR(other.title, '20[0-9]{2}')
+               AND IF(cs.title LIKE 'GATE2%',
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',2),' ',-1),'-',-1) AS UNSIGNED),
+                   IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED), 0))
+                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED), 0)
+               AND IF(cs.title LIKE '%GA-%',
+                   CAST(SUBSTRING_INDEX(cs.title,'GA-',-1) AS UNSIGNED),
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED))
+                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
+               AND (cs.title LIKE '%GA-%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%Question: GA%' OR cs.title LIKE '%| GA |%')
+               AND (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
                AND cs.title NOT LIKE 'GATE CSE%'
@@ -329,17 +339,27 @@ class qa_aptitude_migrate_page
             "SELECT COUNT(*)
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.title = cs.title
-               AND other.branch != 'cs' AND other.type = 'Q'
+               ON other.type = 'Q' AND other.branch != 'cs'
                AND (
-                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
-                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
+                   (other.branch = 'ec' AND (cs.title LIKE 'GATE%EC-%' OR cs.title LIKE 'GATE% EC:%' OR cs.title LIKE 'GATE ECE %')) OR
+                   (other.branch = 'ee' AND (cs.title LIKE 'GATE%EE-%' OR cs.title LIKE 'GATE% EE:%' OR cs.title LIKE 'GATE Electrical %')) OR
+                   (other.branch = 'me' AND (cs.title LIKE 'GATE%ME-%' OR cs.title LIKE 'GATE% ME:%' OR cs.title LIKE 'GATE Mechanical %')) OR
+                   (other.branch = 'ce' AND (cs.title LIKE 'GATE%CE-%' OR cs.title LIKE 'GATE% CE:%' OR cs.title LIKE 'GATE Civil %')) OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE%CH-%' OR cs.title LIKE 'GATE% CH:%' OR cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND (cs.title LIKE 'GATE%IN-%' OR cs.title LIKE 'GATE% IN:%' OR cs.title LIKE 'GATE IN %')) OR
+                   (other.branch = 'bt' AND (cs.title LIKE 'GATE%BT-%' OR cs.title LIKE 'GATE% BT:%' OR cs.title LIKE 'GATE BT %'))
                )
+               AND REGEXP_SUBSTR(cs.title, '20[0-9]{2}') = REGEXP_SUBSTR(other.title, '20[0-9]{2}')
+               AND IF(cs.title LIKE 'GATE2%',
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',2),' ',-1),'-',-1) AS UNSIGNED),
+                   IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED), 0))
+                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED), 0)
+               AND IF(cs.title LIKE '%GA-%',
+                   CAST(SUBSTRING_INDEX(cs.title,'GA-',-1) AS UNSIGNED),
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED))
+                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
+               AND (cs.title LIKE '%GA-%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%Question: GA%' OR cs.title LIKE '%| GA |%')
+               AND (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
                AND cs.title NOT LIKE 'GATE CSE%'
@@ -370,17 +390,27 @@ class qa_aptitude_migrate_page
                     SUM(cs.closedbyid IS NOT NULL) AS closed
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.title = cs.title
-               AND other.branch != 'cs' AND other.type = 'Q'
+               ON other.type = 'Q' AND other.branch != 'cs'
                AND (
-                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
-                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
+                   (other.branch = 'ec' AND (cs.title LIKE 'GATE%EC-%' OR cs.title LIKE 'GATE% EC:%' OR cs.title LIKE 'GATE ECE %')) OR
+                   (other.branch = 'ee' AND (cs.title LIKE 'GATE%EE-%' OR cs.title LIKE 'GATE% EE:%' OR cs.title LIKE 'GATE Electrical %')) OR
+                   (other.branch = 'me' AND (cs.title LIKE 'GATE%ME-%' OR cs.title LIKE 'GATE% ME:%' OR cs.title LIKE 'GATE Mechanical %')) OR
+                   (other.branch = 'ce' AND (cs.title LIKE 'GATE%CE-%' OR cs.title LIKE 'GATE% CE:%' OR cs.title LIKE 'GATE Civil %')) OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE%CH-%' OR cs.title LIKE 'GATE% CH:%' OR cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND (cs.title LIKE 'GATE%IN-%' OR cs.title LIKE 'GATE% IN:%' OR cs.title LIKE 'GATE IN %')) OR
+                   (other.branch = 'bt' AND (cs.title LIKE 'GATE%BT-%' OR cs.title LIKE 'GATE% BT:%' OR cs.title LIKE 'GATE BT %'))
                )
+               AND REGEXP_SUBSTR(cs.title, '20[0-9]{2}') = REGEXP_SUBSTR(other.title, '20[0-9]{2}')
+               AND IF(cs.title LIKE 'GATE2%',
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',2),' ',-1),'-',-1) AS UNSIGNED),
+                   IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED), 0))
+                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED), 0)
+               AND IF(cs.title LIKE '%GA-%',
+                   CAST(SUBSTRING_INDEX(cs.title,'GA-',-1) AS UNSIGNED),
+                   CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED))
+                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
+               AND (cs.title LIKE '%GA-%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%Question: GA%' OR cs.title LIKE '%| GA |%')
+               AND (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
                AND cs.title NOT LIKE 'GATE CSE%'
