@@ -304,27 +304,20 @@ class qa_aptitude_migrate_page
                     other.netvotes AS branch_votes
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.branch != 'cs' AND other.type = 'Q'
-               AND cs.title LIKE 'GATE CSE %'
+               ON other.title = cs.title
+               AND other.branch != 'cs' AND other.type = 'Q'
                AND (
-                   (other.branch = 'ee' AND other.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND other.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND other.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND other.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND other.title LIKE 'GATE Chemical %') OR
-                   (other.branch = 'in' AND other.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND other.title LIKE 'GATE BT %')
+                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
+                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
+                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
+                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
+                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
                )
-               AND SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',3),' ',-1)
-                 = SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,' ',3),' ',-1)
-               AND IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-               AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
-                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
-                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
+               AND cs.title NOT LIKE 'GATE CSE%'
                $branchCondition
              ORDER BY cs.closedbyid IS NULL DESC, cs.acount DESC, cs.postid DESC
              LIMIT #, #",
@@ -336,27 +329,20 @@ class qa_aptitude_migrate_page
             "SELECT COUNT(*)
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.branch != 'cs' AND other.type = 'Q'
-               AND cs.title LIKE 'GATE CSE %'
+               ON other.title = cs.title
+               AND other.branch != 'cs' AND other.type = 'Q'
                AND (
-                   (other.branch = 'ee' AND other.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND other.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND other.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND other.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND other.title LIKE 'GATE Chemical %') OR
-                   (other.branch = 'in' AND other.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND other.title LIKE 'GATE BT %')
+                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
+                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
+                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
+                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
+                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
                )
-               AND SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',3),' ',-1)
-                 = SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,' ',3),' ',-1)
-               AND IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-               AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
-                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
-                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
+               AND cs.title NOT LIKE 'GATE CSE%'
                $branchCondition"
         ), true);
 
@@ -384,27 +370,20 @@ class qa_aptitude_migrate_page
                     SUM(cs.closedbyid IS NOT NULL) AS closed
              FROM qa_engineering_mathematics cs
              JOIN qa_engineering_mathematics other
-               ON other.branch != 'cs' AND other.type = 'Q'
-               AND cs.title LIKE 'GATE CSE %'
+               ON other.title = cs.title
+               AND other.branch != 'cs' AND other.type = 'Q'
                AND (
-                   (other.branch = 'ee' AND other.title LIKE 'GATE Electrical %') OR
-                   (other.branch = 'ec' AND other.title LIKE 'GATE ECE %') OR
-                   (other.branch = 'me' AND other.title LIKE 'GATE Mechanical %') OR
-                   (other.branch = 'ce' AND other.title LIKE 'GATE Civil %') OR
-                   (other.branch = 'ch' AND other.title LIKE 'GATE Chemical %') OR
-                   (other.branch = 'in' AND other.title LIKE 'GATE IN %') OR
-                   (other.branch = 'bt' AND other.title LIKE 'GATE BT %')
+                   (other.branch = 'ee' AND cs.title LIKE 'GATE Electrical %') OR
+                   (other.branch = 'ec' AND cs.title LIKE 'GATE ECE %') OR
+                   (other.branch = 'me' AND cs.title LIKE 'GATE Mechanical %') OR
+                   (other.branch = 'ce' AND cs.title LIKE 'GATE Civil %') OR
+                   (other.branch = 'ch' AND (cs.title LIKE 'GATE Chemical %' OR cs.title LIKE 'GATE CH %')) OR
+                   (other.branch = 'in' AND cs.title LIKE 'GATE IN %') OR
+                   (other.branch = 'bt' AND cs.title LIKE 'GATE BT %')
                )
-               AND SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,' ',3),' ',-1)
-                 = SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,' ',3),' ',-1)
-               AND IF(cs.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-                 = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
-               AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
-                 = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
-                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
+               AND cs.title NOT LIKE 'GATE CSE%'
              GROUP BY other.branch
              ORDER BY total DESC"
         ));
