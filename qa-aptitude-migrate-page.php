@@ -321,8 +321,8 @@ class qa_aptitude_migrate_page
                  = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
                AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
                  = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%')
-                 = (other.title LIKE '%GA Question%')
+               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
+                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
                $branchCondition
@@ -353,8 +353,8 @@ class qa_aptitude_migrate_page
                  = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
                AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
                  = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%')
-                 = (other.title LIKE '%GA Question%')
+               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
+                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
                $branchCondition"
@@ -401,8 +401,8 @@ class qa_aptitude_migrate_page
                  = IF(other.title LIKE '%Set %', CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(other.title,'Set ',-1),' ',1) AS UNSIGNED),0)
                AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(cs.title,': ',-1),'GA',-1) AS UNSIGNED)
                  = CAST(SUBSTRING_INDEX(other.title,': ',-1) AS UNSIGNED)
-               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%')
-                 = (other.title LIKE '%GA Question%')
+               AND (cs.title LIKE '%Question: GA%' OR cs.title LIKE '%GA Question%' OR cs.title LIKE '%| GA |%')
+                 = (other.title LIKE '%GA Question%' OR other.title LIKE '%| GA |%')
              WHERE cs.branch = 'cs' AND cs.type = 'Q'
                AND (cs.tags LIKE '%aptitude%' OR cs.categoryid IN (4,5,6,7))
              GROUP BY other.branch
