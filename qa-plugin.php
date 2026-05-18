@@ -1945,7 +1945,7 @@ foreach($cats as $cat) {
                     foreach ($teList as $tei => $teItem) {
                         $teParts = array_map('trim', explode('|', $teItem['title']));
                         $teLabel = isset($teParts[3]) ? $teParts[3] : 'Test ' . ($tei + 1);
-                        $qhtml .= '<a class="topic-exam-btn" href="' . qa_path_html('iexams/' . $teItem['postid']) . '" style="display:inline-block;padding:4px 10px;background:#fff;border:1px solid #4caf50;border-radius:4px;color:#2e7d32;text-decoration:none;font-weight:500;font-size:0.88em;transition:background 0.2s;">'
+                        $qhtml .= '<a class="topic-exam-btn" href="' . rtrim(qa_network_get($branch), '/') . '/test/' . $teItem['postid'] . '" style="display:inline-block;padding:4px 10px;background:#fff;border:1px solid #4caf50;border-radius:4px;color:#2e7d32;text-decoration:none;font-weight:500;font-size:0.88em;transition:background 0.2s;">'
                             . qa_html($teLabel) . ' <span style="color:#666;font-size:0.9em;">(' . $teItem['total_qs'] . 'Q)</span></a> ';
                     }
                     $qhtml .= '</div>';
