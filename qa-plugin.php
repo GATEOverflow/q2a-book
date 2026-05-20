@@ -1779,6 +1779,7 @@ foreach($cats as $cat) {
     }
     if(!$gate_em) {
         if($gate_da) {
+            $bookTitle = 'GATE Overflow for GATE DA';
             $incsql .= " and ( (qs.title like 'GATE%' and qs.tags like '%gate%' and qs.title not like 'GATE Overflow%' and qs.title not like 'GATE Suitability%')  or (qs.title like 'UGC%' and qs.tags like '%ugc%') or (qs.title like 'GO Classes%' and qs.tags like '%goclasses%') )";
             $booknamesuffix .= "_gate_da";
         }
@@ -1790,6 +1791,7 @@ foreach($cats as $cat) {
     }
     else{
         $booknamesuffix .= "_gate_em";
+        $bookTitle = 'GATE Overflow for GATE Engineering Mathematics and Aptitude';
         $wrongsql = " ($allowemptyq true  )) ";
         $selectspec="SELECT qs.branch as branch,qs.postid AS postid, BINARY qs.title AS title, BINARY qs.content AS content, qs.format AS format, qs.netvotes AS netvotes, qs.tags as tags, qs.selchildid as selected, qs.userid as quserid, qs.lastuserid as qeditor, ans.lastuserid as aeditor, ans.postid as apostid, BINARY ans.content AS acontent, ans.format AS aformat, ans.userid AS auserid, ans.netvotes AS anetvotes, ans.useful as useful FROM qa_engineering_mathematics  qs ".($reqanswers?"":"left outer join")." qa_engineering_mathematics  ans on qs.postid=ans.parentid and ans.type='$atype'  where  
             qs.type='".$qtype."'  and qs.tags not like '%usermod%' and qs.tags not like '%usergate%' and ($privatefilterstring_em)  and qs.tags like '%gate%' and qs.title not like 'GATE Overflow%' and qs.title like 'GATE %'
