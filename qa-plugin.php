@@ -1494,7 +1494,7 @@ function qa_book_plugin_createBook($return=false) {
         $html .= '</table>';
 
         echo $html;
-        return ($dryrun ? 'Would generate' : 'Generated') . ' ' . $result['count'] . ' tag suggestions.';
+        // fall through to book generation
     }
 
     // Handle detect_merges request: find potentially duplicate mintags
