@@ -191,9 +191,9 @@ class qa_book_admin {
 		else if (qa_clicked('book_pdf_url_save')) {
 			// Save PDF download URL for a specific book slug
 			$slug = trim(qa_post_text('book_pdf_slug'));
-			$url  = trim(qa_post_text('book_pdf_url'));
 			$slug = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $slug);
 			if ($slug !== '') {
+				$url  = trim(qa_post_text('bpdf_url__' . $slug));
 				qa_book_set('book_pdf_url__' . $slug, $url);
 				$ok = 'PDF link saved for "' . qa_html($slug) . '"';
 			}
@@ -353,13 +353,13 @@ class qa_book_admin {
 			$slug = basename($relPath, '.html');
 			$slugSafe = qa_html($slug);
 			$currentUrl = qa_book_get('book_pdf_url__' . $slug) ?: '';
-			$pdfLinksHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">'
-				. '<td style="padding:6px 10px;font-family:monospace;font-size:13px">' . $slugSafe . '</td>'
-				. '<td style="padding:6px 10px"><input type="text" name="book_pdf_url" id="bpdf_' . $slugSafe . '" value="' . qa_html($currentUrl) . '" style="width:100%;font-size:13px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));padding:4px 8px" placeholder="https://..."></td>'
-				. '<td style="padding:6px 10px"><button type="submit" name="book_pdf_url_save" value="1" '
-				. 'onclick="document.getElementById(\'bpdf_slug\').value=\'' . addslashes($slug) . '\';document.getElementById(\'bpdf_' . $slugSafe . '\').name=\'book_pdf_url\'" '
-				. 'style="padding:4px 12px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));cursor:pointer">Save</button></td>'
-				. '</tr>';
+			$pdfLinksHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">';
+			$pdfLinksHtml .= '<td style="padding:6px 10px;font-family:monospace;font-size:13px">' . $slugSafe . '</td>';
+			$pdfLinksHtml .= '<td style="padding:6px 10px"><input type="text" name="bpdf_url__' . $slugSafe . '" id="bpdf_' . $slugSafe . '" value="' . qa_html($currentUrl) . '" style="width:100%;font-size:13px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));padding:4px 8px" placeholder="https://..."></td>';
+			$pdfLinksHtml .= '<td style="padding:6px 10px"><button type="submit" name="book_pdf_url_save" value="1" '
+				. 'onclick="document.getElementById(\'bpdf_slug\').value=\'' . addslashes($slug) . '\'"	'
+				. 'style="padding:4px 12px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));cursor:pointer">Save</button></td>';
+			$pdfLinksHtml .= '</tr>';
 		}
 		if (empty($allowedList)) {
 			$pdfLinksHtml .= '<tr><td colspan="3" style="padding:8px 10px"><i>No books configured yet. Add books in the Book Viewer Settings above.</i></td></tr>';
@@ -374,42 +374,30 @@ class qa_book_admin {
 		$fields[] = array('type' => 'blank');
 
 		// --- PDF & Hardcopy Requests view ---
-		$requestsHtml = '<h3>PDF &amp; Hardcopy Requests</h3>';
-		$allRequests = qa_db_read_all_assoc(qa_db_query_sub(
-			'SELECT bookslug, type, handle, email, DATE_FORMAT(created, \'%Y-%m-%d %H:%i\') AS created_fmt' .
-			' FROM ^book_pdf_requests ORDER BY created DESC LIMIT 300'
+		$summaryRows = qa_db_read_all_assoc(qa_db_query_sub(
+			'SELECT bookslug, type, COUNT(*) AS cnt FROM ^book_pdf_requests GROUP BY bookslug, type ORDER BY bookslug, type'
 		));
-		if (empty($allRequests)) {
+		$requestsHtml = '<h3>PDF &amp; Hardcopy Requests</h3>';
+		if (empty($summaryRows)) {
 			$requestsHtml .= '<p><i>No requests recorded yet.</i></p>';
 		} else {
-			// Summary by book + type
-			$summary = array();
-			foreach ($allRequests as $r) {
-				$k = $r['bookslug'] . '|' . $r['type'];
-				$summary[$k] = isset($summary[$k]) ? $summary[$k] + 1 : 1;
-			}
-			$requestsHtml .= '<p><b>Summary:</b></p><ul style="margin:0 0 12px 0;padding-left:20px">';
-			foreach ($summary as $k => $cnt) {
-				list($bs, $bt) = explode('|', $k, 2);
-				$requestsHtml .= '<li>' . qa_html($bs) . ' — ' . qa_html(strtoupper($bt)) . ': <b>' . $cnt . '</b></li>';
-			}
-			$requestsHtml .= '</ul>';
-			$requestsHtml .= '<table style="border-collapse:collapse;width:100%;font-size:13px">';
-			$requestsHtml .= '<tr style="background:var(--divider-color,rgba(128,128,128,0.1))"><th style="padding:5px 8px;text-align:left">Book</th><th style="padding:5px 8px;text-align:left">Type</th><th style="padding:5px 8px;text-align:left">User</th><th style="padding:5px 8px;text-align:left">Email</th><th style="padding:5px 8px;text-align:left">Date</th></tr>';
-			foreach ($allRequests as $r) {
-				$typeLabel = $r['type'] === 'hardcopy' ? '<span style="color:#8250df">Hardcopy</span>' : '<span style="color:#0969da">PDF</span>';
-				$requestsHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">'
-					. '<td style="padding:4px 8px;font-family:monospace">' . qa_html($r['bookslug']) . '</td>'
-					. '<td style="padding:4px 8px">' . $typeLabel . '</td>'
-					. '<td style="padding:4px 8px">' . qa_html($r['handle'] ?: '—') . '</td>'
-					. '<td style="padding:4px 8px">' . qa_html($r['email'] ?: '—') . '</td>'
-					. '<td style="padding:4px 8px;white-space:nowrap">' . qa_html($r['created_fmt']) . '</td>'
+			$byBook = array(); $grandTotal = 0;
+			foreach ($summaryRows as $r) { $byBook[$r['bookslug']][$r['type']] = (int)$r['cnt']; $grandTotal += (int)$r['cnt']; }
+			$requestsHtml .= '<p><b>' . $grandTotal . ' total request' . ($grandTotal !== 1 ? 's' : '') . '</b></p>';
+			$requestsHtml .= '<table style="border-collapse:collapse;font-size:14px;margin-bottom:10px">';
+			$requestsHtml .= '<tr style="background:rgba(128,128,128,0.1)"><th style="padding:5px 10px;text-align:left">Book</th><th style="padding:5px 10px">PDF</th><th style="padding:5px 10px">Hardcopy</th><th style="padding:5px 10px">Total</th></tr>';
+			foreach ($byBook as $slug => $counts) {
+				$pdf = isset($counts['pdf']) ? $counts['pdf'] : 0;
+				$hc  = isset($counts['hardcopy']) ? $counts['hardcopy'] : 0;
+				$requestsHtml .= '<tr style="border-top:1px solid rgba(128,128,128,0.2)">'
+					. '<td style="padding:4px 10px;font-family:monospace;font-size:13px">' . qa_html($slug) . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;color:#0969da">' . ($pdf ?: '—') . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;color:#8250df">' . ($hc  ?: '—') . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;font-weight:bold">' . ($pdf + $hc) . '</td>'
 					. '</tr>';
 			}
 			$requestsHtml .= '</table>';
-			if (count($allRequests) >= 300) {
-				$requestsHtml .= '<p style="font-size:12px;color:#57606a"><i>Showing most recent 300 requests.</i></p>';
-			}
+			$requestsHtml .= '<p><a href="' . qa_path_html('admin/book-requests') . '" style="padding:5px 14px;border:1px solid rgba(128,128,128,0.4);border-radius:4px;text-decoration:none;font-size:13px">&#128214; View all requests &rarr;</a></p>';
 		}
 
 		$fields[] = array(

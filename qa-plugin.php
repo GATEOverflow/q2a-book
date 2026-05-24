@@ -14,6 +14,7 @@ qa_register_plugin_module('widget', 'qa-book-widget.php', 'qa_book_widget', 'Boo
 
 qa_register_plugin_module('page', 'qa-topic-exams-page.php', 'qa_topic_exams_page', 'Topic Exams Index');
 qa_register_plugin_module('page', 'qa-book-suggested-tags-page.php', 'qa_book_suggested_tags_page', 'Suggested Tags Page');
+qa_register_plugin_module('page', 'qa-book-requests-page.php', 'qa_book_requests_page', 'Book Requests Page');
 qa_register_plugin_module('page', 'qa-aptitude-migrate-page.php', 'qa_aptitude_migrate_page', 'Aptitude Migration');
 
 qa_register_plugin_module('page', 'qa-book-viewer-page.php', 'qa_book_page', 'Book Viewer Page');
@@ -188,25 +189,27 @@ function qa_book_getallcats(&$cats, $all=false, $em=false)	{
 }
 
 function qa_book_get($key,$prefix = null,$book="book_") {
-    static $bookcache = array();
+    global $qa_book_cache;
+    if (!is_array($qa_book_cache)) $qa_book_cache = array();
     if($prefix) $pre = "^"; else $pre = "qa_";
     if($book === "book_") {
-        if(isset($bookcache[$key])) {
-            return $bookcache[$key];
+        if(isset($qa_book_cache[$key])) {
+            return $qa_book_cache[$key];
         }
     }
     $query = "select content from ".$pre.$book."options where title = $";
     $result = qa_db_query_sub($query, $key);
     $value = qa_db_read_one_value($result, true);
     if($book === "book_") {
-        $bookcache[$key] = $value;
+        $qa_book_cache[$key] = $value;
     }
     return $value;
 }
 
 function qa_book_set($key, $value, $prefix = null) {
+    global $qa_book_cache;
+    if (is_array($qa_book_cache) && isset($qa_book_cache[$key])) unset($qa_book_cache[$key]);
     if($prefix) $pre = "^"; else $pre = "qa_";
-    if(isset($bookcache[$key])) unset($bookcache[$key]);
     $table = $pre."book_options";
     $query = "insert into $table (title, content) values ($,$) on duplicate key update content = $";
     //	error_log($query." ".$value." ".$key);
