@@ -90,8 +90,8 @@ class qa_book_page
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
-		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css');
-		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js');
+		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css?v=2');
+		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js?v=2');
 
 		// Build PDF / hardcopy toolbar buttons (only when a book is selected)
 		$pdfButtonHtml = '';
