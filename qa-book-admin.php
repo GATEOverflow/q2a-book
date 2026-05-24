@@ -17,6 +17,20 @@ class qa_book_admin {
 			$queries[] = qa_book_category_intro_table_query();
 		}
 
+		if (!in_array(qa_db_add_table_prefix('book_pdf_requests'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_pdf_requests (' .
+				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .
+				'bookslug VARCHAR(255) NOT NULL,' .
+				"type ENUM('pdf','hardcopy') NOT NULL DEFAULT 'pdf'," .
+				'userid INT UNSIGNED NULL,' .
+				'handle VARCHAR(255) NULL,' .
+				'email VARCHAR(255) NULL,' .
+				'created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' .
+				'INDEX idx_book_type (bookslug, type),' .
+				'INDEX idx_created (created)' .
+				') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+		}
+
 		return $queries;
 	}
 
@@ -174,6 +188,16 @@ class qa_book_admin {
 			}
 			$ok = 'Book file removed';
 		}
+		else if (qa_clicked('book_pdf_url_save')) {
+			// Save PDF download URL for a specific book slug
+			$slug = trim(qa_post_text('book_pdf_slug'));
+			$url  = trim(qa_post_text('book_pdf_url'));
+			$slug = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $slug);
+			if ($slug !== '') {
+				qa_book_set('book_pdf_url__' . $slug, $url);
+				$ok = 'PDF link saved for "' . qa_html($slug) . '"';
+			}
+		}
 		else if (qa_clicked('book_plugin_process') || qa_clicked('book_plugin_save')) {
 
 			qa_opt('book_plugin_active',(bool)qa_post_text('book_plugin_active'));
@@ -319,6 +343,81 @@ class qa_book_admin {
 			'type' => 'blank',
 		);
 		// --- End Book Viewer settings ---
+
+		// --- PDF Download Links per book ---
+		$pdfLinksHtml = '<h3>Book PDF Download Links</h3>';
+		$pdfLinksHtml .= '<p><i>Set a direct PDF download URL per book. If set, users see a "Download PDF" button; otherwise a "Request PDF" button is shown.</i></p>';
+		$pdfLinksHtml .= '<table style="border-collapse:collapse;width:100%">';
+		$pdfLinksHtml .= '<tr style="background:var(--divider-color,rgba(128,128,128,0.1))"><th style="padding:6px 10px;text-align:left">Book Slug</th><th style="padding:6px 10px;text-align:left">PDF URL</th><th style="padding:6px 10px"></th></tr>';
+		foreach ($allowedList as $relPath) {
+			$slug = basename($relPath, '.html');
+			$slugSafe = qa_html($slug);
+			$currentUrl = qa_book_get('book_pdf_url__' . $slug) ?: '';
+			$pdfLinksHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">'
+				. '<td style="padding:6px 10px;font-family:monospace;font-size:13px">' . $slugSafe . '</td>'
+				. '<td style="padding:6px 10px"><input type="text" name="book_pdf_url" id="bpdf_' . $slugSafe . '" value="' . qa_html($currentUrl) . '" style="width:100%;font-size:13px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));padding:4px 8px" placeholder="https://..."></td>'
+				. '<td style="padding:6px 10px"><button type="submit" name="book_pdf_url_save" value="1" '
+				. 'onclick="document.getElementById(\'bpdf_slug\').value=\'' . addslashes($slug) . '\';document.getElementById(\'bpdf_' . $slugSafe . '\').name=\'book_pdf_url\'" '
+				. 'style="padding:4px 12px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));cursor:pointer">Save</button></td>'
+				. '</tr>';
+		}
+		if (empty($allowedList)) {
+			$pdfLinksHtml .= '<tr><td colspan="3" style="padding:8px 10px"><i>No books configured yet. Add books in the Book Viewer Settings above.</i></td></tr>';
+		}
+		$pdfLinksHtml .= '</table>';
+		$pdfLinksHtml .= '<input type="hidden" name="book_pdf_slug" id="bpdf_slug" value="">';
+
+		$fields[] = array(
+			'value' => $pdfLinksHtml,
+			'type' => 'static',
+		);
+		$fields[] = array('type' => 'blank');
+
+		// --- PDF & Hardcopy Requests view ---
+		$requestsHtml = '<h3>PDF &amp; Hardcopy Requests</h3>';
+		$allRequests = qa_db_read_all_assoc(qa_db_query_sub(
+			'SELECT bookslug, type, handle, email, DATE_FORMAT(created, \'%Y-%m-%d %H:%i\') AS created_fmt' .
+			' FROM ^book_pdf_requests ORDER BY created DESC LIMIT 300'
+		));
+		if (empty($allRequests)) {
+			$requestsHtml .= '<p><i>No requests recorded yet.</i></p>';
+		} else {
+			// Summary by book + type
+			$summary = array();
+			foreach ($allRequests as $r) {
+				$k = $r['bookslug'] . '|' . $r['type'];
+				$summary[$k] = isset($summary[$k]) ? $summary[$k] + 1 : 1;
+			}
+			$requestsHtml .= '<p><b>Summary:</b></p><ul style="margin:0 0 12px 0;padding-left:20px">';
+			foreach ($summary as $k => $cnt) {
+				list($bs, $bt) = explode('|', $k, 2);
+				$requestsHtml .= '<li>' . qa_html($bs) . ' — ' . qa_html(strtoupper($bt)) . ': <b>' . $cnt . '</b></li>';
+			}
+			$requestsHtml .= '</ul>';
+			$requestsHtml .= '<table style="border-collapse:collapse;width:100%;font-size:13px">';
+			$requestsHtml .= '<tr style="background:var(--divider-color,rgba(128,128,128,0.1))"><th style="padding:5px 8px;text-align:left">Book</th><th style="padding:5px 8px;text-align:left">Type</th><th style="padding:5px 8px;text-align:left">User</th><th style="padding:5px 8px;text-align:left">Email</th><th style="padding:5px 8px;text-align:left">Date</th></tr>';
+			foreach ($allRequests as $r) {
+				$typeLabel = $r['type'] === 'hardcopy' ? '<span style="color:#8250df">Hardcopy</span>' : '<span style="color:#0969da">PDF</span>';
+				$requestsHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">'
+					. '<td style="padding:4px 8px;font-family:monospace">' . qa_html($r['bookslug']) . '</td>'
+					. '<td style="padding:4px 8px">' . $typeLabel . '</td>'
+					. '<td style="padding:4px 8px">' . qa_html($r['handle'] ?: '—') . '</td>'
+					. '<td style="padding:4px 8px">' . qa_html($r['email'] ?: '—') . '</td>'
+					. '<td style="padding:4px 8px;white-space:nowrap">' . qa_html($r['created_fmt']) . '</td>'
+					. '</tr>';
+			}
+			$requestsHtml .= '</table>';
+			if (count($allRequests) >= 300) {
+				$requestsHtml .= '<p style="font-size:12px;color:#57606a"><i>Showing most recent 300 requests.</i></p>';
+			}
+		}
+
+		$fields[] = array(
+			'value' => $requestsHtml,
+			'type' => 'static',
+		);
+		$fields[] = array('type' => 'blank');
+		// --- End PDF requests ---
 
 		for($i = 1; $i <= 10; $i++) {
 			$fields[] = array(
