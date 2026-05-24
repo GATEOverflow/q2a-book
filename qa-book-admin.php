@@ -31,6 +31,19 @@ class qa_book_admin {
 				') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
 		}
 
+		if (!in_array(qa_db_add_table_prefix('tag_merge_suggestions'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^tag_merge_suggestions (' .
+				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .
+				'tag_a VARCHAR(120) NOT NULL,' .
+				'tag_b VARCHAR(120) NOT NULL,' .
+				'category VARCHAR(200) NULL,' .
+				"status ENUM('pending','approved','rejected') DEFAULT 'pending'," .
+				'created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' .
+				'branch VARCHAR(20) NULL,' .
+				'INDEX (tag_a)' .
+				') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+		}
+
 		return $queries;
 	}
 

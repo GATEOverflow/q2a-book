@@ -817,7 +817,7 @@ class qa_book_suggested_tags_page
 			if ($exists > 0) { $skipped++; continue; }
 
 			qa_db_query_sub(
-				"INSERT INTO ^tag_merge_suggestions (tag_a, tag_b, category, branch, status) VALUES ($, $, $, $, 'pending')",
+				"INSERT IGNORE INTO ^tag_merge_suggestions (tag_a, tag_b, category, branch, status) VALUES ($, $, $, $, 'pending')",
 				$branchTag, $bestMatch, $branchName, $branchCode
 			);
 			$inserted++;
