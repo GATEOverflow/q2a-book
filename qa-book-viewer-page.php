@@ -79,7 +79,7 @@ class qa_book_page
 		$userId      = qa_get_logged_in_userid();
 		$userHandle  = qa_get_logged_in_handle() ?: '';
 		$userEmail   = qa_get_logged_in_email()  ?: '';
-		$csrfToken   = qa_form_security_code('book-request');
+		$csrfToken   = qa_get_form_security_code('book-request');
 
 		// Build book selector dropdown
 		$bookOptions = '';
