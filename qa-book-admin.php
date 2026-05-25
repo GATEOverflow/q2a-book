@@ -25,6 +25,31 @@ class qa_book_admin {
 				. "status ENUM('skipped','completed','wrong') NOT NULL,"
 				. 'PRIMARY KEY (userid, postid, site_prefix)'
 				. ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+		if (!in_array(qa_db_add_table_prefix('book_pdf_requests'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_pdf_requests (' .
+				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .
+				'bookslug VARCHAR(255) NOT NULL,' .
+				"type ENUM('pdf','hardcopy') NOT NULL DEFAULT 'pdf'," .
+				'userid INT UNSIGNED NULL,' .
+				'handle VARCHAR(255) NULL,' .
+				'email VARCHAR(255) NULL,' .
+				'created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' .
+				'INDEX idx_book_type (bookslug, type),' .
+				'INDEX idx_created (created)' .
+				') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+		}
+
+		if (!in_array(qa_db_add_table_prefix('tag_merge_suggestions'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^tag_merge_suggestions (' .
+				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .
+				'tag_a VARCHAR(120) NOT NULL,' .
+				'tag_b VARCHAR(120) NOT NULL,' .
+				'category VARCHAR(200) NULL,' .
+				"status ENUM('pending','approved','rejected') DEFAULT 'pending'," .
+				'created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' .
+				'branch VARCHAR(20) NULL,' .
+				'INDEX (tag_a)' .
+				') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
 		}
 
 		return $queries;
@@ -184,6 +209,16 @@ class qa_book_admin {
 			}
 			$ok = 'Book file removed';
 		}
+		else if (qa_clicked('book_pdf_url_save')) {
+			// Save PDF download URL for a specific book slug
+			$slug = trim(qa_post_text('book_pdf_slug'));
+			$slug = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $slug);
+			if ($slug !== '') {
+				$url  = trim(qa_post_text('bpdf_url__' . $slug));
+				qa_book_set('book_pdf_url__' . $slug, $url);
+				$ok = 'PDF link saved for "' . qa_html($slug) . '"';
+			}
+		}
 		else if (qa_clicked('book_plugin_process') || qa_clicked('book_plugin_save')) {
 
 			qa_opt('book_plugin_active',(bool)qa_post_text('book_plugin_active'));
@@ -329,6 +364,69 @@ class qa_book_admin {
 			'type' => 'blank',
 		);
 		// --- End Book Viewer settings ---
+
+		// --- PDF Download Links per book ---
+		$pdfLinksHtml = '<h3>Book PDF Download Links</h3>';
+		$pdfLinksHtml .= '<p><i>Set a direct PDF download URL per book. If set, users see a "Download PDF" button; otherwise a "Request PDF" button is shown.</i></p>';
+		$pdfLinksHtml .= '<table style="border-collapse:collapse;width:100%">';
+		$pdfLinksHtml .= '<tr style="background:var(--divider-color,rgba(128,128,128,0.1))"><th style="padding:6px 10px;text-align:left">Book Slug</th><th style="padding:6px 10px;text-align:left">PDF URL</th><th style="padding:6px 10px"></th></tr>';
+		foreach ($allowedList as $relPath) {
+			$slug = basename($relPath, '.html');
+			$slugSafe = qa_html($slug);
+			$currentUrl = qa_book_get('book_pdf_url__' . $slug) ?: '';
+			$pdfLinksHtml .= '<tr style="border-top:1px solid var(--divider-color,rgba(128,128,128,0.3))">';
+			$pdfLinksHtml .= '<td style="padding:6px 10px;font-family:monospace;font-size:13px">' . $slugSafe . '</td>';
+			$pdfLinksHtml .= '<td style="padding:6px 10px"><input type="text" name="bpdf_url__' . $slugSafe . '" id="bpdf_' . $slugSafe . '" value="' . qa_html($currentUrl) . '" style="width:100%;font-size:13px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));padding:4px 8px" placeholder="https://..."></td>';
+			$pdfLinksHtml .= '<td style="padding:6px 10px"><button type="submit" name="book_pdf_url_save" value="1" '
+				. 'onclick="document.getElementById(\'bpdf_slug\').value=\'' . addslashes($slug) . '\'"	'
+				. 'style="padding:4px 12px;background:transparent;color:inherit;border:1px solid var(--divider-color,rgba(128,128,128,0.3));cursor:pointer">Save</button></td>';
+			$pdfLinksHtml .= '</tr>';
+		}
+		if (empty($allowedList)) {
+			$pdfLinksHtml .= '<tr><td colspan="3" style="padding:8px 10px"><i>No books configured yet. Add books in the Book Viewer Settings above.</i></td></tr>';
+		}
+		$pdfLinksHtml .= '</table>';
+		$pdfLinksHtml .= '<input type="hidden" name="book_pdf_slug" id="bpdf_slug" value="">';
+
+		$fields[] = array(
+			'value' => $pdfLinksHtml,
+			'type' => 'static',
+		);
+		$fields[] = array('type' => 'blank');
+
+		// --- PDF & Hardcopy Requests view ---
+		$summaryRows = qa_db_read_all_assoc(qa_db_query_sub(
+			'SELECT bookslug, type, COUNT(*) AS cnt FROM ^book_pdf_requests GROUP BY bookslug, type ORDER BY bookslug, type'
+		));
+		$requestsHtml = '<h3>PDF &amp; Hardcopy Requests</h3>';
+		if (empty($summaryRows)) {
+			$requestsHtml .= '<p><i>No requests recorded yet.</i></p>';
+		} else {
+			$byBook = array(); $grandTotal = 0;
+			foreach ($summaryRows as $r) { $byBook[$r['bookslug']][$r['type']] = (int)$r['cnt']; $grandTotal += (int)$r['cnt']; }
+			$requestsHtml .= '<p><b>' . $grandTotal . ' total request' . ($grandTotal !== 1 ? 's' : '') . '</b></p>';
+			$requestsHtml .= '<table style="border-collapse:collapse;font-size:14px;margin-bottom:10px">';
+			$requestsHtml .= '<tr style="background:rgba(128,128,128,0.1)"><th style="padding:5px 10px;text-align:left">Book</th><th style="padding:5px 10px">PDF</th><th style="padding:5px 10px">Hardcopy</th><th style="padding:5px 10px">Total</th></tr>';
+			foreach ($byBook as $slug => $counts) {
+				$pdf = isset($counts['pdf']) ? $counts['pdf'] : 0;
+				$hc  = isset($counts['hardcopy']) ? $counts['hardcopy'] : 0;
+				$requestsHtml .= '<tr style="border-top:1px solid rgba(128,128,128,0.2)">'
+					. '<td style="padding:4px 10px;font-family:monospace;font-size:13px">' . qa_html($slug) . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;color:#0969da">' . ($pdf ?: '—') . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;color:#8250df">' . ($hc  ?: '—') . '</td>'
+					. '<td style="padding:4px 10px;text-align:center;font-weight:bold">' . ($pdf + $hc) . '</td>'
+					. '</tr>';
+			}
+			$requestsHtml .= '</table>';
+			$requestsHtml .= '<p><a href="' . qa_path_html('admin/book-requests') . '" style="padding:5px 14px;border:1px solid rgba(128,128,128,0.4);border-radius:4px;text-decoration:none;font-size:13px">&#128214; View all requests &rarr;</a></p>';
+		}
+
+		$fields[] = array(
+			'value' => $requestsHtml,
+			'type' => 'static',
+		);
+		$fields[] = array('type' => 'blank');
+		// --- End PDF requests ---
 
 		for($i = 1; $i <= 10; $i++) {
 			$fields[] = array(

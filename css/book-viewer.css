@@ -1447,3 +1447,172 @@ html:not([data-theme="light"]) .bv-status-btn.bv-qs-wrong     { color: #ef5350; 
 html:not([data-theme="light"]) .question[data-qstatus="completed"] { border-left-color: #66bb6a; }
 html:not([data-theme="light"]) .question[data-qstatus="skipped"]   { border-left-color: #fdd835; }
 html:not([data-theme="light"]) .question[data-qstatus="wrong"]     { border-left-color: #ef5350; }
+}}
+
+/* =====================================================
+   PDF Download + Request Hardcopy buttons
+   ===================================================== */
+
+.bv-btn-pdf-dl {
+	background: #2da44e;
+	color: #fff;
+	text-decoration: none;
+	padding: 6px 14px;
+	border-radius: 4px;
+	font-size: 13px;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border: none;
+	cursor: pointer;
+}
+.bv-btn-pdf-dl:hover {
+	background: #2c974b;
+	color: #fff;
+}
+
+.bv-btn-pdf-req {
+	background: #0969da;
+}
+.bv-btn-pdf-req:hover {
+	background: #0860ca;
+}
+
+.bv-btn-hardcopy {
+	background: #8250df;
+}
+.bv-btn-hardcopy:hover {
+	background: #6639ba;
+}
+
+/* =====================================================
+   Request Modal
+   ===================================================== */
+
+#bv-request-modal {
+	position: fixed;
+	top: 0; left: 0; right: 0; bottom: 0;
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.bv-modal-overlay {
+	position: absolute;
+	top: 0; left: 0; right: 0; bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.bv-modal-box {
+	position: relative;
+	z-index: 10000;
+	background: #fff;
+	color: #24292f;
+	border-radius: 8px;
+	padding: 24px 28px;
+	width: 400px;
+	max-width: 92vw;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.bv-modal-box h3 {
+	margin: 0 0 10px 0;
+	font-size: 18px;
+}
+
+.bv-modal-box p {
+	margin: 0 0 16px 0;
+	font-size: 14px;
+	color: #57606a;
+}
+
+#bv-modal-email-row {
+	margin-bottom: 16px;
+}
+
+#bv-modal-email-row label {
+	display: block;
+	font-size: 13px;
+	margin-bottom: 5px;
+	color: #24292f;
+}
+
+#bv-modal-email {
+	width: 100%;
+	padding: 7px 10px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 14px;
+	box-sizing: border-box;
+	background: #fff;
+	color: #24292f;
+}
+
+.bv-modal-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.bv-modal-submit {
+	background: #0969da;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 8px 20px;
+	cursor: pointer;
+	font-size: 14px;
+}
+.bv-modal-submit:hover {
+	background: #0860ca;
+}
+.bv-modal-submit:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.bv-modal-cancel {
+	background: transparent;
+	color: #57606a;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	padding: 8px 20px;
+	cursor: pointer;
+	font-size: 14px;
+}
+.bv-modal-cancel:hover {
+	background: #f6f8fa;
+}
+
+#bv-modal-result {
+	margin-top: 12px;
+	font-size: 13px;
+	min-height: 18px;
+}
+
+/* Dark-theme overrides for modal */
+html:not([data-theme="light"]) .bv-modal-box {
+	background: #1c2128;
+	color: #adbac7;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+}
+html:not([data-theme="light"]) .bv-modal-box p {
+	color: #768390;
+}
+html:not([data-theme="light"]) #bv-modal-email-row label {
+	color: #adbac7;
+}
+html:not([data-theme="light"]) #bv-modal-email {
+	background: #22272e;
+	color: #adbac7;
+	border-color: rgba(255, 255, 255, 0.15);
+}
+html:not([data-theme="light"]) .bv-modal-cancel {
+	color: #adbac7;
+	border-color: rgba(255, 255, 255, 0.2);
+}
+html:not([data-theme="light"]) .bv-modal-cancel:hover {
+	background: rgba(255, 255, 255, 0.05);
+}

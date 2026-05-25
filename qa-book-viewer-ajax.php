@@ -32,6 +32,71 @@ class qa_book_ajax
 	{
 		header('Content-Type: application/json; charset=utf-8');
 
+		// --- Handle PDF / Hardcopy request submission ---
+		if (qa_get('action') === 'book_request') {
+			$token    = isset($_POST['csrf']) ? $_POST['csrf'] : '';
+			if (!qa_check_form_security_code('book-request', $token)) {
+				echo json_encode(array('error' => 'Invalid security token. Please reload the page.'));
+				exit;
+			}
+			$type     = isset($_POST['type']) ? $_POST['type'] : '';
+			$bookSlug = isset($_POST['book']) ? $_POST['book'] : '';
+			$email    = isset($_POST['email']) ? trim($_POST['email']) : '';
+
+			if (!in_array($type, array('pdf', 'hardcopy'), true)) {
+				echo json_encode(array('error' => 'Invalid request type.'));
+				exit;
+			}
+			$bookSlug = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $bookSlug);
+			if ($bookSlug === '') {
+				echo json_encode(array('error' => 'No book specified.'));
+				exit;
+			}
+			if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+				echo json_encode(array('error' => 'Invalid email address.'));
+				exit;
+			}
+
+			$userId    = qa_get_logged_in_userid();
+			$handle    = qa_get_logged_in_handle();
+			$userEmail = qa_get_logged_in_email();
+			if ($email === '' && $userEmail) {
+				$email = $userEmail;
+			}
+
+			// Deduplicate: same user/email, same book+type within the last hour
+			if ($userId) {
+				$recent = qa_db_read_one_value(qa_db_query_sub(
+					'SELECT COUNT(*) FROM ^book_pdf_requests WHERE bookslug=$ AND type=$ AND userid=$ AND created > DATE_SUB(NOW(), INTERVAL 1 HOUR)',
+					$bookSlug, $type, $userId
+				), true);
+			} elseif ($email !== '') {
+				$recent = qa_db_read_one_value(qa_db_query_sub(
+					'SELECT COUNT(*) FROM ^book_pdf_requests WHERE bookslug=$ AND type=$ AND email=$ AND created > DATE_SUB(NOW(), INTERVAL 1 HOUR)',
+					$bookSlug, $type, $email
+				), true);
+			} else {
+				$recent = 0;
+			}
+
+			if ($recent > 0) {
+				echo json_encode(array('ok' => true, 'msg' => 'Your request is already recorded. We\'ll follow up soon!'));
+				exit;
+			}
+
+			qa_db_query_sub(
+				'INSERT INTO ^book_pdf_requests (bookslug, type, userid, handle, email) VALUES ($, $, $, $, $)',
+				$bookSlug, $type,
+				$userId  ?: null,
+				$handle  ?: null,
+				$email   ?: null
+			);
+
+			$label = ($type === 'hardcopy') ? 'Hardcopy request' : 'PDF request';
+			echo json_encode(array('ok' => true, 'msg' => $label . ' recorded. Thank you!'));
+			exit;
+		}
+
 		$book = qa_get('book');
 		$sectionId = qa_get('section');
 		$sectionType = qa_get('type');

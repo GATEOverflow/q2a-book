@@ -1184,6 +1184,100 @@ var BookViewer = (function () {
 		return div.innerHTML;
 	}
 
+	// --- PDF / Hardcopy Request Modal ---
+
+	var _pendingRequestType = null;
+
+	function requestPdf() {
+		openRequestModal('pdf');
+	}
+
+	function requestHardcopy() {
+		openRequestModal('hardcopy');
+	}
+
+	function openRequestModal(type) {
+		if (!config.selectedBook) {
+			showToast('Please select a book first.');
+			return;
+		}
+		_pendingRequestType = type;
+
+		var modal    = document.getElementById('bv-request-modal');
+		var title    = document.getElementById('bv-modal-title');
+		var desc     = document.getElementById('bv-modal-desc');
+		var result   = document.getElementById('bv-modal-result');
+		var emailRow = document.getElementById('bv-modal-email-row');
+
+		title.textContent = type === 'pdf' ? 'Request PDF' : 'Request Hardcopy';
+		desc.textContent  = 'Book: ' + (config.bookTitle || config.selectedBook);
+		if (result) result.textContent = '';
+
+		// Show email row only for anonymous users; pre-fill if we have their email
+		if (!config.userId) {
+			if (emailRow) emailRow.style.display = '';
+			var emailInput = document.getElementById('bv-modal-email');
+			if (emailInput) emailInput.value = config.userEmail || '';
+		} else {
+			if (emailRow) emailRow.style.display = 'none';
+		}
+
+		if (modal) modal.style.display = 'flex';
+	}
+
+	function closeModal() {
+		var modal = document.getElementById('bv-request-modal');
+		if (modal) modal.style.display = 'none';
+		_pendingRequestType = null;
+	}
+
+	function submitRequest() {
+		var type = _pendingRequestType;
+		if (!type || !config.selectedBook) return;
+
+		var email = '';
+		if (!config.userId) {
+			var emailInput = document.getElementById('bv-modal-email');
+			email = emailInput ? emailInput.value.trim() : '';
+		}
+
+		var resultEl = document.getElementById('bv-modal-result');
+		if (resultEl) { resultEl.textContent = 'Submitting\u2026'; resultEl.style.color = ''; }
+
+		var submitBtn = document.querySelector('.bv-modal-submit');
+		if (submitBtn) submitBtn.disabled = true;
+
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl + '?action=book_request', true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState !== 4) return;
+			if (submitBtn) submitBtn.disabled = false;
+			try {
+				var data = JSON.parse(xhr.responseText);
+				if (data.ok) {
+					if (resultEl) { resultEl.textContent = data.msg || 'Request submitted!'; resultEl.style.color = '#2da44e'; }
+					showToast(data.msg || 'Request submitted!');
+					setTimeout(closeModal, 1800);
+				} else {
+					if (resultEl) { resultEl.textContent = data.error || 'Error. Please try again.'; resultEl.style.color = '#d73a49'; }
+				}
+			} catch (e) {
+				if (resultEl) { resultEl.textContent = 'Error submitting request.'; resultEl.style.color = '#d73a49'; }
+			}
+		};
+		var params = 'type='  + encodeURIComponent(type)
+			+ '&book='  + encodeURIComponent(config.selectedBook)
+			+ '&email=' + encodeURIComponent(email)
+			+ '&csrf='  + encodeURIComponent(config.csrfToken || '');
+		xhr.send(params);
+	}
+
+	// Close modal on Escape key
+	document.addEventListener('keydown', function (e) {
+		if (e.key === 'Escape' && _pendingRequestType) closeModal();
+	});
+
 	// Auto-init on DOM ready
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', init);
@@ -1203,5 +1297,9 @@ var BookViewer = (function () {
 		toggleList: toggleList,
 		openNotePopup: openNotePopup,
 		filterByStatus: filterByStatus
+		requestPdf: requestPdf,
+		requestHardcopy: requestHardcopy,
+		closeModal: closeModal,
+		submitRequest: submitRequest
 	};
 })();

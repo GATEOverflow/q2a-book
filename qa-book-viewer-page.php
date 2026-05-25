@@ -73,6 +73,14 @@ class qa_book_page
 			$tocJson = $this->buildTocJson($bookPaths[$selectedBook]);
 		}
 
+		// PDF download link (per book slug) and user context for request modal
+		$pdfUrl      = ($selectedBook ? (qa_book_get('book_pdf_url__' . $selectedBook) ?: '') : '');
+		$bookTitle   = ($selectedBook && isset($books[$selectedBook])) ? $books[$selectedBook] : $selectedBook;
+		$userId      = qa_get_logged_in_userid();
+		$userHandle  = qa_get_logged_in_handle() ?: '';
+		$userEmail   = qa_get_logged_in_email()  ?: '';
+		$csrfToken   = qa_get_form_security_code('book-request');
+
 		// Build book selector dropdown
 		$bookOptions = '';
 		foreach ($books as $slug => $title) {
@@ -86,6 +94,26 @@ class qa_book_page
 		$notesEnabled = function_exists('qa_note_to_html') ? 'true' : 'false';
 		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css');
 		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js');
+		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css?v=2');
+		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js?v=2');
+
+		// Build PDF / hardcopy toolbar buttons (only when a book is selected)
+		$pdfButtonHtml = '';
+		if ($selectedBook) {
+			if ($pdfUrl) {
+				$pdfButtonHtml = '<a href="' . qa_html($pdfUrl) . '" class="bv-btn-pdf-dl" target="_blank" rel="noopener">&#8615; Download PDF</a>';
+			} else {
+				$pdfButtonHtml = '<button class="bv-btn-pdf-req" onclick="BookViewer.requestPdf()">Request PDF</button>';
+			}
+			$pdfButtonHtml .= ' <button class="bv-btn-hardcopy" onclick="BookViewer.requestHardcopy()">&#128218; Request Hardcopy</button>';
+		}
+
+		$pdfUrlJson     = json_encode($pdfUrl);
+		$bookTitleJson  = json_encode($bookTitle);
+		$userIdJson     = $userId ? (int)$userId : 'null';
+		$userHandleJson = json_encode($userHandle);
+		$userEmailJson  = json_encode($userEmail);
+		$csrfJson       = json_encode($csrfToken);
 
 		$qa_content['custom'] = <<<HTML
 <link rel="stylesheet" href="{$cssUrl}">
@@ -114,6 +142,7 @@ class qa_book_page
 		<span id="bv-tag-count"></span>
 		<button id="bv-expand-all" onclick="BookViewer.expandAll()">Expand All</button>
 		<button id="bv-collapse-all" onclick="BookViewer.collapseAll()">Collapse All</button>
+		{$pdfButtonHtml}
 		<button id="bv-fullscreen" onclick="BookViewer.toggleFullscreen()" title="Fullscreen">&#x26F6;</button>
 	</div>
 	<div class="bv-container">
@@ -127,6 +156,22 @@ class qa_book_page
 		</main>
 	</div>
 </div>
+<div id="bv-request-modal" style="display:none">
+	<div class="bv-modal-overlay" onclick="BookViewer.closeModal()"></div>
+	<div class="bv-modal-box">
+		<h3 id="bv-modal-title">Request</h3>
+		<p id="bv-modal-desc"></p>
+		<div id="bv-modal-email-row">
+			<label for="bv-modal-email">Your email (so we can notify you):</label>
+			<input type="email" id="bv-modal-email" placeholder="your@email.com">
+		</div>
+		<div class="bv-modal-actions">
+			<button onclick="BookViewer.submitRequest()" class="bv-modal-submit">Submit Request</button>
+			<button onclick="BookViewer.closeModal()" class="bv-modal-cancel">Cancel</button>
+		</div>
+		<div id="bv-modal-result"></div>
+	</div>
+</div>
 <script>
 	var BookViewerConfig = {
 		ajaxUrl: '{$ajaxUrl}',
@@ -135,6 +180,13 @@ class qa_book_page
 		listsEnabled: {$listsEnabled},
 		notesEnabled: {$notesEnabled},
 		toc: {$tocJson}
+		toc: {$tocJson},
+		pdfUrl: {$pdfUrlJson},
+		bookTitle: {$bookTitleJson},
+		userId: {$userIdJson},
+		userHandle: {$userHandleJson},
+		userEmail: {$userEmailJson},
+		csrfToken: {$csrfJson}
 	};
 </script>
 <script src="{$jsUrl}"></script>
