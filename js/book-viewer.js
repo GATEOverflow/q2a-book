@@ -247,6 +247,19 @@ var BookViewer = (function () {
 			filterByTag(tagInput.value);
 		}
 
+		// Fetch and inject lists buttons (only if lists plugin is available)
+		if (config.listsEnabled) injectListButtons();
+
+		// Fetch and inject notes buttons (only if notes plugin is available)
+		if (config.notesEnabled) injectNoteButtons();
+
+		// Inject question status buttons and load statuses
+		injectStatusButtons();
+		loadQuestionStatuses();
+		initStatusFilter();
+		activeStatusFilters = [];
+		applyStatusFilter();
+
 		// Scroll content to top
 		document.getElementById('bv-content').scrollTop = 0;
 	}
@@ -574,6 +587,595 @@ var BookViewer = (function () {
 		}
 	}
 
+	// --- Lists Integration ---
+
+	var activePopupQid = null;
+
+	function getPostIdFromTitle(titleEl) {
+		var anchor = titleEl.querySelector('a[id^="question"]');
+		if (!anchor) return null;
+		var m = anchor.getAttribute('id').match(/^question(\d+)$/);
+		return m ? parseInt(m[1], 10) : null;
+	}
+
+	function getSiteUrlFromTitle(titleEl) {
+		var anchor = titleEl.querySelector('a[id^="question"]');
+		if (!anchor || !anchor.href) return '';
+		return anchor.href;
+		try {
+			var u = new URL(anchor.href);
+			return u.origin;
+		} catch (e) { return ''; }
+	}
+
+	function injectListButtons() {
+		var titles = document.querySelectorAll('#bv-content-area .question-title');
+		for (var i = 0; i < titles.length; i++) {
+			if (titles[i].querySelector('.bv-lists-btn')) continue;
+			var postId = getPostIdFromTitle(titles[i]);
+			if (!postId) continue;
+			var siteUrl = getSiteUrlFromTitle(titles[i]);
+
+			var btn = document.createElement('button');
+			btn.className = 'bv-lists-btn';
+			btn.setAttribute('data-postid', postId);
+			btn.setAttribute('data-siteurl', siteUrl);
+			btn.title = 'Manage it in lists';
+			btn.innerHTML = '&#9734;';
+			btn.onclick = (function (pid, su, btnEl) {
+				return function (e) {
+					e.stopPropagation();
+					e.preventDefault();
+					openListsPopup(pid, su, btnEl);
+				};
+			})(postId, siteUrl, btn);
+			titles[i].appendChild(btn);
+		}
+	}
+
+	function openListsPopup(postId, siteUrl, anchorEl) {
+		closeListsPopup();
+		activePopupQid = postId;
+
+		// Show loading popup
+		var popup = document.createElement('div');
+		popup.id = 'bv-lists-popup';
+		popup.innerHTML = '<div class="bv-lists-popup-body" style="padding:12px;text-align:center;">Loading...</div>';
+		var rect = anchorEl.getBoundingClientRect();
+		popup.style.position = 'fixed';
+		popup.style.top = (rect.bottom + 4) + 'px';
+		popup.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
+		popup.style.zIndex = '10000';
+		document.body.appendChild(popup);
+
+		// Fetch list data for this question
+		var url = config.ajaxUrl + '?type=lists&postid=' + postId
+			+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4) {
+				var p = document.getElementById('bv-lists-popup');
+				if (!p) return;
+				if (xhr.status === 200) {
+					try {
+						var data = JSON.parse(xhr.responseText);
+						if (!data.loggedIn) {
+							p.innerHTML = '<div class="bv-lists-popup-body" style="padding:12px;">Please log in to use lists.</div>';
+							return;
+						}
+						renderListsPopup(p, postId, siteUrl, data);
+					} catch (e) {
+						p.innerHTML = '<div class="bv-lists-popup-body" style="padding:12px;">Error loading lists.</div>';
+					}
+				} else {
+					p.innerHTML = '<div class="bv-lists-popup-body" style="padding:12px;">Error loading lists.</div>';
+				}
+			}
+		};
+		xhr.send();
+
+		setTimeout(function () {
+			document.addEventListener('mousedown', outsideClickHandler);
+		}, 0);
+	}
+
+	function renderListsPopup(popup, postId, siteUrl, data) {
+		var checkedLists = data.checkedLists || [];
+		var suParam = siteUrl ? ',\'' + siteUrl.replace(/'/g, '') + '\'' : ',\'\''; 
+		var html = '<div class="bv-lists-popup-header"><span>My Lists</span>'
+			+ '<button class="bv-lists-popup-close" onclick="document.getElementById(\'bv-lists-popup\').remove()">&times;</button></div>'
+			+ '<div class="bv-lists-popup-body">';
+
+		for (var i = 0; i <= data.listCount; i++) {
+			var checked = checkedLists.indexOf(i) >= 0 ? ' checked' : '';
+			var name = data.listNames[i] || ('List ' + i);
+			html += '<label class="bv-lists-check-label">'
+				+ '<input type="checkbox" class="bv-lists-check" value="' + i + '"' + checked
+				+ ' onchange="BookViewer.toggleList(' + postId + ',' + i + ',this.checked' + suParam + ')">'
+				+ ' ' + escapeHtml(name) + '</label>';
+		}
+
+		html += '</div>';
+		popup.innerHTML = html;
+	}
+
+	function toggleList(postId, listId, checked, siteUrl) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl, true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var resp = JSON.parse(xhr.responseText);
+					if (resp.error) {
+						showToast('Error: ' + (resp.message || resp.error));
+					}
+				} catch (e) {}
+			}
+		};
+		var body = 'type=listtoggle&postid=' + postId + '&listid=' + listId + '&checked=' + (checked ? '1' : '0');
+		if (siteUrl) body += '&siteurl=' + encodeURIComponent(siteUrl);
+		xhr.send(body);
+	}
+
+	function outsideClickHandler(e) {
+		var popup = document.getElementById('bv-lists-popup');
+		if (popup && !popup.contains(e.target) && !e.target.classList.contains('bv-lists-btn')) {
+			closeListsPopup();
+		}
+	}
+
+	function closeListsPopup() {
+		var popup = document.getElementById('bv-lists-popup');
+		if (popup) popup.remove();
+		activePopupQid = null;
+		document.removeEventListener('mousedown', outsideClickHandler);
+	}
+
+	// --- Notes Integration ---
+
+	function injectNoteButtons() {
+		var titles = document.querySelectorAll('#bv-content-area .question-title');
+		for (var i = 0; i < titles.length; i++) {
+			if (titles[i].querySelector('.bv-note-btn')) continue;
+			var postId = getPostIdFromTitle(titles[i]);
+			if (!postId) continue;
+			var siteUrl = getSiteUrlFromTitle(titles[i]);
+
+			var btn = document.createElement('button');
+			btn.className = 'bv-note-btn';
+			btn.setAttribute('data-postid', postId);
+			btn.setAttribute('data-siteurl', siteUrl);
+			btn.title = 'Add / Edit Note';
+			btn.innerHTML = '&#9998;';
+			btn.onclick = (function (pid, su, btnEl) {
+				return function (e) {
+					e.stopPropagation();
+					e.preventDefault();
+					openNotePopup(pid, su, btnEl);
+				};
+			})(postId, siteUrl, btn);
+			titles[i].appendChild(btn);
+		}
+	}
+
+	function openNotePopup(postId, siteUrl, anchorEl) {
+		closeNotePopup();
+
+		var popup = document.createElement('div');
+		popup.id = 'bv-note-popup';
+		popup.innerHTML = '<div class="bv-note-popup-header"><span>My Note</span>'
+			+ '<button class="bv-note-popup-close" onclick="document.getElementById(\'bv-note-popup\').remove()">&times;</button></div>'
+			+ '<div class="bv-note-popup-body" style="padding:12px;text-align:center;">Loading...</div>';
+		var rect = anchorEl.getBoundingClientRect();
+		popup.style.position = 'fixed';
+		popup.style.top = (rect.bottom + 4) + 'px';
+		popup.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+		popup.style.zIndex = '10000';
+		document.body.appendChild(popup);
+
+		// Load existing note
+		var url = config.ajaxUrl + '?type=notes&postid=' + postId
+			+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4) {
+				var p = document.getElementById('bv-note-popup');
+				if (!p) return;
+				if (xhr.status === 200) {
+					try {
+						var data = JSON.parse(xhr.responseText);
+						if (data.loggedIn === false) {
+							p.querySelector('.bv-note-popup-body').innerHTML = 'Please log in to use notes.';
+							return;
+						}
+						renderNotePopup(p, postId, siteUrl, data.note || '');
+					} catch (e) {
+						p.querySelector('.bv-note-popup-body').innerHTML = 'Error loading note.';
+					}
+				} else {
+					p.querySelector('.bv-note-popup-body').innerHTML = 'Error loading note.';
+				}
+			}
+		};
+		xhr.send();
+
+		setTimeout(function () {
+			document.addEventListener('mousedown', noteOutsideClickHandler);
+		}, 0);
+	}
+
+	function renderNotePopup(popup, postId, siteUrl, noteText) {
+		var body = popup.querySelector('.bv-note-popup-body');
+		var hasNote = noteText.length > 0;
+		body.style.textAlign = '';
+		body.innerHTML = '<textarea id="bv-note-textarea" rows="6" placeholder="Type your note here...">' + escapeHtml(noteText) + '</textarea>'
+			+ '<div class="bv-note-actions">'
+			+ '<button class="bv-note-save-btn" id="bv-note-save">' + (hasNote ? 'Update' : 'Save') + '</button>'
+			+ (hasNote ? '<button class="bv-note-delete-btn" id="bv-note-delete">Delete</button>' : '')
+			+ '</div>';
+
+		document.getElementById('bv-note-save').onclick = function () {
+			var text = document.getElementById('bv-note-textarea').value.trim();
+			saveNote(postId, siteUrl, text);
+		};
+
+		var delBtn = document.getElementById('bv-note-delete');
+		if (delBtn) {
+			delBtn.onclick = function () {
+				deleteNote(postId, siteUrl);
+			};
+		}
+	}
+
+	function saveNote(postId, siteUrl, text) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl, true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var resp = JSON.parse(xhr.responseText);
+					if (resp.success) {
+						closeNotePopup();
+						updateNoteBtnState(postId, !resp.deleted);
+						showToast(resp.deleted ? 'Note deleted' : 'Note saved');
+					} else {
+						showToast('Error: ' + (resp.error || 'Unknown'));
+					}
+				} catch (e) {
+					showToast('Error saving note');
+				}
+			}
+		};
+		var body = 'type=notesave&postid=' + postId + '&text=' + encodeURIComponent(text);
+		if (siteUrl) body += '&siteurl=' + encodeURIComponent(siteUrl);
+		xhr.send(body);
+	}
+
+	function deleteNote(postId, siteUrl) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl, true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var resp = JSON.parse(xhr.responseText);
+					if (resp.success) {
+						closeNotePopup();
+						updateNoteBtnState(postId, false);
+						showToast('Note deleted');
+					} else {
+						showToast('Error: ' + (resp.error || 'Unknown'));
+					}
+				} catch (e) {
+					showToast('Error deleting note');
+				}
+			}
+		};
+		var body = 'type=notedelete&postid=' + postId;
+		if (siteUrl) body += '&siteurl=' + encodeURIComponent(siteUrl);
+		xhr.send(body);
+	}
+
+	function updateNoteBtnState(postId, hasNote) {
+		var btns = document.querySelectorAll('.bv-note-btn[data-postid="' + postId + '"]');
+		for (var i = 0; i < btns.length; i++) {
+			if (hasNote) {
+				btns[i].classList.add('bv-note-active');
+				btns[i].title = 'Edit Note';
+			} else {
+				btns[i].classList.remove('bv-note-active');
+				btns[i].title = 'Add / Edit Note';
+			}
+		}
+	}
+
+	function noteOutsideClickHandler(e) {
+		var popup = document.getElementById('bv-note-popup');
+		if (popup && !popup.contains(e.target) && !e.target.classList.contains('bv-note-btn')) {
+			closeNotePopup();
+		}
+	}
+
+	function closeNotePopup() {
+		var popup = document.getElementById('bv-note-popup');
+		if (popup) popup.remove();
+		document.removeEventListener('mousedown', noteOutsideClickHandler);
+	}
+
+	// --- Question Status Integration ---
+
+	var STATUS_OPTIONS = [
+		{ value: '',          label: '—',       icon: '—',  title: 'Clear status' },
+		{ value: 'completed', label: 'Done',     icon: '✔', title: 'Mark as completed' },
+		{ value: 'skipped',   label: 'Skipped',  icon: '⏭', title: 'Mark as skipped' },
+		{ value: 'wrong',     label: 'Wrong',    icon: '✘', title: 'Mark as wrong attempt' }
+	];
+
+	function injectStatusButtons() {
+		var titles = document.querySelectorAll('#bv-content-area .question-title');
+		for (var i = 0; i < titles.length; i++) {
+			if (titles[i].querySelector('.bv-status-btn')) continue;
+			var postId = getPostIdFromTitle(titles[i]);
+			if (!postId) continue;
+			var siteUrl = getSiteUrlFromTitle(titles[i]);
+
+			var btn = document.createElement('button');
+			btn.className = 'bv-status-btn';
+			btn.setAttribute('data-postid', postId);
+			btn.setAttribute('data-siteurl', siteUrl);
+			btn.setAttribute('data-status', '');
+			btn.title = 'Set status';
+			btn.innerHTML = '—';
+			btn.onclick = (function (pid, su, btnEl) {
+				return function (e) {
+					e.stopPropagation();
+					e.preventDefault();
+					openStatusPopup(pid, su, btnEl);
+				};
+			})(postId, siteUrl, btn);
+			titles[i].appendChild(btn);
+		}
+	}
+
+	function loadQuestionStatuses() {
+		var btns = document.querySelectorAll('#bv-content-area .bv-status-btn');
+		if (!btns.length) return;
+
+		// Group by siteUrl
+		var groups = {};
+		for (var i = 0; i < btns.length; i++) {
+			var su = btns[i].getAttribute('data-siteurl') || '';
+			if (!groups[su]) groups[su] = [];
+			groups[su].push(btns[i].getAttribute('data-postid'));
+		}
+
+		Object.keys(groups).forEach(function (su) {
+			var postids = groups[su].join(',');
+			var url = config.ajaxUrl + '?type=qstatus&postids=' + encodeURIComponent(postids)
+				+ (su ? '&siteurl=' + encodeURIComponent(su) : '');
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', url, true);
+			xhr.onreadystatechange = function () {
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					try {
+						var data = JSON.parse(xhr.responseText);
+						if (data.statuses) {
+							Object.keys(data.statuses).forEach(function (pid) {
+								updateStatusBtn(parseInt(pid), data.statuses[pid]);
+								setQuestionStatusClass(parseInt(pid), data.statuses[pid]);
+							});
+						}
+						updateStatusFilterCounts();
+					} catch (e) {}
+				}
+			};
+			xhr.send();
+		});
+	}
+
+	function openStatusPopup(postId, siteUrl, anchorEl) {
+		closeStatusPopup();
+
+		var popup = document.createElement('div');
+		popup.id = 'bv-status-popup';
+		var currentStatus = anchorEl.getAttribute('data-status') || '';
+
+		var html = '<div class="bv-status-popup-header"><span>Question Status</span>'
+			+ '<button class="bv-status-popup-close" onclick="document.getElementById(\'bv-status-popup\').remove()">&times;</button></div>'
+			+ '<div class="bv-status-popup-body">';
+
+		for (var i = 0; i < STATUS_OPTIONS.length; i++) {
+			var opt = STATUS_OPTIONS[i];
+			var active = (opt.value === currentStatus) ? ' bv-status-opt-active' : '';
+			html += '<button class="bv-status-opt' + active + '" data-value="' + opt.value + '"'
+				+ ' title="' + opt.title + '">'
+				+ '<span class="bv-status-opt-icon bv-si-' + (opt.value || 'clear') + '">' + opt.icon + '</span> '
+				+ opt.label + '</button>';
+		}
+
+		html += '</div>';
+		popup.innerHTML = html;
+
+		var rect = anchorEl.getBoundingClientRect();
+		popup.style.position = 'fixed';
+		popup.style.top = (rect.bottom + 4) + 'px';
+		popup.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+		popup.style.zIndex = '10000';
+		document.body.appendChild(popup);
+
+		// Bind click handlers
+		var opts = popup.querySelectorAll('.bv-status-opt');
+		for (var j = 0; j < opts.length; j++) {
+			opts[j].onclick = (function (val) {
+				return function (e) {
+					e.stopPropagation();
+					setQuestionStatus(postId, siteUrl, val || 'clear');
+					closeStatusPopup();
+				};
+			})(opts[j].getAttribute('data-value'));
+		}
+
+		setTimeout(function () {
+			document.addEventListener('mousedown', statusOutsideClickHandler);
+		}, 0);
+	}
+
+	function setQuestionStatus(postId, siteUrl, status) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl, true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var resp = JSON.parse(xhr.responseText);
+					if (resp.success) {
+						var newStatus = resp.status || '';
+						updateStatusBtn(postId, newStatus);
+						setQuestionStatusClass(postId, newStatus);
+						updateStatusFilterCounts();
+						applyStatusFilter();
+					} else {
+						showToast('Error: ' + (resp.error || 'Unknown'));
+					}
+				} catch (e) {
+					showToast('Error setting status');
+				}
+			}
+		};
+		var body = 'type=qstatusset&postid=' + postId + '&status=' + encodeURIComponent(status);
+		if (siteUrl) body += '&siteurl=' + encodeURIComponent(siteUrl);
+		xhr.send(body);
+	}
+
+	function updateStatusBtn(postId, status) {
+		var btns = document.querySelectorAll('.bv-status-btn[data-postid="' + postId + '"]');
+		for (var i = 0; i < btns.length; i++) {
+			btns[i].setAttribute('data-status', status);
+			btns[i].className = 'bv-status-btn' + (status ? ' bv-qs-' + status : '');
+			var opt = STATUS_OPTIONS.find(function (o) { return o.value === status; }) || STATUS_OPTIONS[0];
+			btns[i].innerHTML = opt.icon;
+			btns[i].title = status ? (opt.label) : 'Set status';
+		}
+	}
+
+	function setQuestionStatusClass(postId, status) {
+		// Find the .question div containing this postid
+		var anchor = document.querySelector('#bv-content-area a#question' + postId);
+		if (!anchor) return;
+		var questionDiv = anchor.closest('.question');
+		if (!questionDiv) return;
+		questionDiv.setAttribute('data-qstatus', status || '');
+	}
+
+	// --- Status Filter ---
+
+	var activeStatusFilters = [];
+
+	function initStatusFilter() {
+		var toolbar = document.querySelector('.bv-toolbar');
+		if (!toolbar || document.getElementById('bv-status-filter-bar')) return;
+
+		var bar = document.createElement('div');
+		bar.id = 'bv-status-filter-bar';
+		bar.className = 'bv-status-filter-bar';
+		bar.innerHTML = '<span class="bv-sf-label">Filter:</span>'
+			+ '<button class="bv-sf-btn bv-sf-all bv-sf-active" data-filter="all" onclick="BookViewer.filterByStatus(\'all\')">All <span class="bv-sf-count" id="bv-sf-count-all"></span></button>'
+			+ '<button class="bv-sf-btn bv-sf-unmarked" data-filter="unmarked" onclick="BookViewer.filterByStatus(\'unmarked\')">Unmarked <span class="bv-sf-count" id="bv-sf-count-unmarked"></span></button>'
+			+ '<button class="bv-sf-btn bv-sf-completed" data-filter="completed" onclick="BookViewer.filterByStatus(\'completed\')">✔ Done <span class="bv-sf-count" id="bv-sf-count-completed"></span></button>'
+			+ '<button class="bv-sf-btn bv-sf-skipped" data-filter="skipped" onclick="BookViewer.filterByStatus(\'skipped\')">⏭ Skipped <span class="bv-sf-count" id="bv-sf-count-skipped"></span></button>'
+			+ '<button class="bv-sf-btn bv-sf-wrong" data-filter="wrong" onclick="BookViewer.filterByStatus(\'wrong\')">✘ Wrong <span class="bv-sf-count" id="bv-sf-count-wrong"></span></button>';
+		toolbar.parentNode.insertBefore(bar, toolbar.nextSibling);
+	}
+
+	function filterByStatus(filter) {
+		var btns = document.querySelectorAll('.bv-sf-btn');
+
+		if (filter === 'all') {
+			activeStatusFilters = [];
+			for (var i = 0; i < btns.length; i++) {
+				btns[i].classList.toggle('bv-sf-active', btns[i].getAttribute('data-filter') === 'all');
+			}
+		} else {
+			// Toggle this filter
+			var idx = activeStatusFilters.indexOf(filter);
+			if (idx >= 0) {
+				activeStatusFilters.splice(idx, 1);
+			} else {
+				activeStatusFilters.push(filter);
+			}
+
+			// Update button states
+			for (var i = 0; i < btns.length; i++) {
+				var f = btns[i].getAttribute('data-filter');
+				if (f === 'all') {
+					btns[i].classList.toggle('bv-sf-active', activeStatusFilters.length === 0);
+				} else {
+					btns[i].classList.toggle('bv-sf-active', activeStatusFilters.indexOf(f) >= 0);
+				}
+			}
+
+			if (activeStatusFilters.length === 0) {
+				// nothing selected = show all
+			}
+		}
+
+		applyStatusFilter();
+	}
+
+	function applyStatusFilter() {
+		var questions = document.querySelectorAll('#bv-content-area .question');
+		if (!questions.length) return;
+
+		if (activeStatusFilters.length === 0) {
+			// Show all
+			for (var i = 0; i < questions.length; i++) {
+				questions[i].style.display = '';
+			}
+			return;
+		}
+
+		for (var i = 0; i < questions.length; i++) {
+			var qs = questions[i].getAttribute('data-qstatus') || '';
+			var matchKey = qs || 'unmarked';
+			var show = activeStatusFilters.indexOf(matchKey) >= 0;
+			questions[i].style.display = show ? '' : 'none';
+		}
+	}
+
+	function updateStatusFilterCounts() {
+		var questions = document.querySelectorAll('#bv-content-area .question');
+		var counts = { all: questions.length, unmarked: 0, completed: 0, skipped: 0, wrong: 0 };
+		for (var i = 0; i < questions.length; i++) {
+			var qs = questions[i].getAttribute('data-qstatus') || '';
+			if (qs && counts.hasOwnProperty(qs)) {
+				counts[qs]++;
+			} else {
+				counts.unmarked++;
+			}
+		}
+		['all', 'unmarked', 'completed', 'skipped', 'wrong'].forEach(function (key) {
+			var el = document.getElementById('bv-sf-count-' + key);
+			if (el) el.textContent = '(' + counts[key] + ')';
+		});
+	}
+
+	function statusOutsideClickHandler(e) {
+		var popup = document.getElementById('bv-status-popup');
+		if (popup && !popup.contains(e.target) && !e.target.classList.contains('bv-status-btn')) {
+			closeStatusPopup();
+		}
+	}
+
+	function closeStatusPopup() {
+		var popup = document.getElementById('bv-status-popup');
+		if (popup) popup.remove();
+		document.removeEventListener('mousedown', statusOutsideClickHandler);
+	}
+
 	// --- Utility ---
 
 	function escapeHtml(str) {
@@ -597,6 +1199,9 @@ var BookViewer = (function () {
 		loadSection: loadSection,
 		toggleSidebar: toggleSidebar,
 		toggleFullscreen: toggleFullscreen,
-		filterByTag: filterByTag
+		filterByTag: filterByTag,
+		toggleList: toggleList,
+		openNotePopup: openNotePopup,
+		filterByStatus: filterByStatus
 	};
 })();

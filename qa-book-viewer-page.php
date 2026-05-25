@@ -82,6 +82,8 @@ class qa_book_page
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
+		$listsEnabled = function_exists('qa_lists_savelist') ? 'true' : 'false';
+		$notesEnabled = function_exists('qa_note_to_html') ? 'true' : 'false';
 		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css');
 		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js');
 
@@ -130,6 +132,8 @@ class qa_book_page
 		ajaxUrl: '{$ajaxUrl}',
 		rootUrl: '{$rootUrl}',
 		selectedBook: '{$selectedBook}',
+		listsEnabled: {$listsEnabled},
+		notesEnabled: {$notesEnabled},
 		toc: {$tocJson}
 	};
 </script>
