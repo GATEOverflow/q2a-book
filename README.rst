@@ -38,6 +38,28 @@ Book Viewer
 - **Multi-book support** — Drop multiple HTML files in ``html/``; a dropdown lets users switch
 - **Auto-caching** — TOC structure is cached as ``.toc.json`` and auto-regenerated when the HTML changes
 
+Lists Integration
+~~~~~~~~~~~~~~~~~
+- **Bookmark / Lists** — Each question title shows a ☆ button to add/remove the question from user-defined lists
+- **Cross-site support** — Works across Q2A network sites; the question's origin site is auto-detected from its URL
+- Requires the **Lists plugin** (``qa-lists``) to be installed; the feature is auto-detected and hidden if unavailable
+
+Notes Integration
+~~~~~~~~~~~~~~~~~
+- **Self notes** — Each question title shows a ✎ button to add, edit, or delete a personal note
+- **Cross-site support** — Notes are stored per-user per-question, resolved to the correct network site's DB table
+- Requires the **Notes plugin** (``qa-plugin/note``) to be installed; auto-detected
+
+Question Status Tracking
+~~~~~~~~~~~~~~~~~~~~~~~~
+- **Per-question status** — Mark each question as ✔ Completed, ⏭ Skipped, or ✘ Wrong via a status button on the title
+- **Visual indicators** — Questions get a colored left border (green/yellow/red) matching their status
+- **Filter bar** — A filter toolbar below the main toolbar lets you toggle visibility by status (All, Unmarked, Done, Skipped, Wrong)
+- **Multi-select filters** — Click multiple filter buttons to show e.g. Skipped + Wrong together
+- **Live counts** — Each filter button shows a count that updates in real time as you mark questions
+- **Cross-site support** — Statuses are stored with the network site prefix, so they work correctly for cross-site questions
+- Stored in the ``^book_question_status`` table, created automatically on first use
+
 ------------
 Installation
 ------------
@@ -67,7 +89,7 @@ File Structure
   q2a-book/
   ├── qa-plugin.php              # Plugin registration (book generation + viewer)
   ├── metadata.json              # Plugin metadata
-  ├── qa-book-admin.php          # Admin panel for book generation
+  ├── qa-book-admin.php          # Admin panel for book generation + DB table creation
   ├── qa-book-overrides.php      # Q2A overrides
   ├── qa-book-widget.php         # Sidebar widget
   ├── util-book.php              # Utilities
@@ -76,11 +98,11 @@ File Structure
   │   └── *.html
   └── book-view/                 # Book Viewer module
       ├── qa-book-page.php       # Page module — renders the viewer UI and builds TOC
-      ├── qa-book-ajax.php       # AJAX endpoint — extracts and returns section HTML
+      ├── qa-book-ajax.php       # AJAX endpoint — section extraction, lists, notes, question status
       ├── css/
       │   └── book-viewer.css    # All styles including dark mode
       └── js/
-          └── book-viewer.js     # Frontend: TOC tree, AJAX loading, search, MathJax
+          └── book-viewer.js     # Frontend: TOC tree, AJAX loading, search, lists, notes, status
 
 ------------
 Static Files

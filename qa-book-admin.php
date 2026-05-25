@@ -17,6 +17,14 @@ class qa_book_admin {
 			$queries[] = qa_book_category_intro_table_query();
 		}
 
+		if (!in_array(qa_db_add_table_prefix('book_question_status'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_question_status ('
+				. 'userid INT NOT NULL,'
+				. 'postid INT NOT NULL,'
+				. 'site_prefix VARCHAR(100) NOT NULL,'
+				. "status ENUM('skipped','completed','wrong') NOT NULL,"
+				. 'PRIMARY KEY (userid, postid, site_prefix)'
+				. ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
 		if (!in_array(qa_db_add_table_prefix('book_pdf_requests'), $tablescreated)) {
 			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_pdf_requests (' .
 				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .

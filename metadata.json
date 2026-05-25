@@ -9,5 +9,6 @@
   "license": "GPLv2",
   "update_uri": "https://raw.githubusercontent.com/gateoverflow/q2a-book/master/metadata.json",
   "min_q2a": "1.5",
+  "dependency_level": 2,
   "load_order": "after_db_init"
 }
