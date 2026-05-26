@@ -225,7 +225,12 @@ var BookViewer = (function () {
 
 		// Re-run code prettify if available
 		if (window.PR && PR.prettyPrint) {
-			PR.prettyPrint();
+			// Remove already-prettified marker so dynamic content gets re-processed
+			var blocks = contentArea.querySelectorAll('pre.prettyprint');
+			for (var pi = 0; pi < blocks.length; pi++) {
+				blocks[pi].classList.remove('prettyprinted');
+			}
+			PR.prettyPrint(null, contentArea);
 		}
 
 		// Make all links open in a new tab

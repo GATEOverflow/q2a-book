@@ -87,7 +87,7 @@ class qa_book_page
 			$sel = ($slug === $selectedBook) ? ' selected' : '';
 			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . qa_html($title) . '</option>';
 		}
-		$version = 3;
+		$version = 8;
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
@@ -128,7 +128,8 @@ class qa_book_page
 	});
 </script>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-<script async type="text/javascript" src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prettify/r298/prettify.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prettify/r298/lang-c.min.js"></script>
 <div id="book-viewer-app">
 	<div class="bv-toolbar">
 		<button id="bv-toggle-sidebar" onclick="BookViewer.toggleSidebar()" title="Toggle sidebar">&#9776;</button>
