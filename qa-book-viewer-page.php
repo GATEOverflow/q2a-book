@@ -87,15 +87,14 @@ class qa_book_page
 			$sel = ($slug === $selectedBook) ? ' selected' : '';
 			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . qa_html($title) . '</option>';
 		}
+		$version = 3;
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
 		$listsEnabled = function_exists('qa_lists_savelist') ? 'true' : 'false';
 		$notesEnabled = function_exists('qa_note_to_html') ? 'true' : 'false';
-		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css');
-		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js');
-		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css?v=2');
-		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js?v=2');
+		$cssUrl = qa_html($this->urltoroot . 'css/book-viewer.css?v=' . $version);
+		$jsUrl = qa_html($this->urltoroot . 'js/book-viewer.js?v=' . $version);
 
 		// Build PDF / hardcopy toolbar buttons (only when a book is selected)
 		$pdfButtonHtml = '';
@@ -179,7 +178,6 @@ class qa_book_page
 		selectedBook: '{$selectedBook}',
 		listsEnabled: {$listsEnabled},
 		notesEnabled: {$notesEnabled},
-		toc: {$tocJson}
 		toc: {$tocJson},
 		pdfUrl: {$pdfUrlJson},
 		bookTitle: {$bookTitleJson},

@@ -1296,7 +1296,7 @@ var BookViewer = (function () {
 		filterByTag: filterByTag,
 		toggleList: toggleList,
 		openNotePopup: openNotePopup,
-		filterByStatus: filterByStatus
+		filterByStatus: filterByStatus,
 		requestPdf: requestPdf,
 		requestHardcopy: requestHardcopy,
 		closeModal: closeModal,
