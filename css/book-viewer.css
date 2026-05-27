@@ -1632,6 +1632,26 @@ html:not([data-theme="light"]) .bv-modal-cancel:hover {
     color: #333;
     tab-size: 4;
 }
+
+/* linenums variant – ol wraps the lines, reset outer padding */
+#bv-content-area pre.prettyprint.linenums {
+    padding: 0;
+}
+#bv-content-area pre.prettyprint ol.linenums {
+    margin: 0;
+    padding: 10px 16px 10px 52px;
+    font-size: 14px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    line-height: 1.5;
+    color: #333;
+    tab-size: 4;
+}
+#bv-content-area pre.prettyprint ol.linenums > li {
+    white-space: pre-wrap;
+    list-style-type: decimal;
+    padding: 0;
+    margin: 0;
+}
 #bv-content-area pre.prettyprint .pln { color: #333; }
 #bv-content-area pre.prettyprint .str { color: #d14; }
 #bv-content-area pre.prettyprint .kwd { color: #0000ff; font-weight: bold; }
@@ -1646,6 +1666,12 @@ html:not([data-theme="light"]) .bv-modal-cancel:hover {
 html:not([data-theme="light"]) #bv-content-area pre.prettyprint {
     background-color: #1e1e1e;
     border-color: #444;
+    color: #d4d4d4;
+}
+html:not([data-theme="light"]) #bv-content-area pre.prettyprint ol.linenums {
+    color: #d4d4d4;
+}
+html:not([data-theme="light"]) #bv-content-area pre.prettyprint ol.linenums > li {
     color: #d4d4d4;
 }
 html:not([data-theme="light"]) #bv-content-area pre.prettyprint .pln { color: #d4d4d4; }

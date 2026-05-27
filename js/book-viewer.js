@@ -169,28 +169,74 @@ var BookViewer = (function () {
 		return topics;
 	}
 
-	function buildNavBar(item) {
-		if (item.type !== 'topic') return '';
-		var topics = getFlatTopics();
-		var idx = -1;
-		for (var i = 0; i < topics.length; i++) {
-			if (topics[i].id === item.id) { idx = i; break; }
+	function getFlatQuestions() {
+		var questions = [];
+		for (var i = 0; i < tocData.length; i++) {
+			var cat = tocData[i];
+			if (!cat.children) continue;
+			for (var j = 0; j < cat.children.length; j++) {
+				var child = cat.children[j];
+				if (child.type === 'topic' && child.children) {
+					for (var k = 0; k < child.children.length; k++) {
+						if (child.children[k].type === 'question') {
+							questions.push(child.children[k]);
+						}
+					}
+				} else if (child.type === 'question') {
+					questions.push(child);
+				}
+			}
 		}
-		if (idx === -1) return '';
+		return questions;
+	}
 
-		var prev = idx > 0 ? topics[idx - 1] : null;
-		var next = idx < topics.length - 1 ? topics[idx + 1] : null;
+	function buildNavBar(item) {
 		var html = '<div class="bv-nav-bar">';
-		if (prev) {
-			html += '<button class="bv-nav-btn bv-nav-prev" data-idx="' + (idx - 1) + '">&larr; ' + escapeHtml(prev.number + ' ' + prev.title) + '</button>';
+
+		if (item.type === 'topic') {
+			var topics = getFlatTopics();
+			var idx = -1;
+			for (var i = 0; i < topics.length; i++) {
+				if (topics[i].id === item.id) { idx = i; break; }
+			}
+			if (idx === -1) return '';
+			var prev = idx > 0 ? topics[idx - 1] : null;
+			var next = idx < topics.length - 1 ? topics[idx + 1] : null;
+			if (prev) {
+				html += '<button class="bv-nav-btn bv-nav-prev" data-idx="' + (idx - 1) + '" data-mode="topic">&larr; ' + escapeHtml(prev.number + ' ' + prev.title) + '</button>';
+			} else {
+				html += '<span></span>';
+			}
+			if (next) {
+				html += '<button class="bv-nav-btn bv-nav-next" data-idx="' + (idx + 1) + '" data-mode="topic">' + escapeHtml(next.number + ' ' + next.title) + ' &rarr;</button>';
+			} else {
+				html += '<span></span>';
+			}
+
+		} else if (item.type === 'question') {
+			var questions = getFlatQuestions();
+			var idx = -1;
+			for (var i = 0; i < questions.length; i++) {
+				if (questions[i].id === item.id) { idx = i; break; }
+			}
+			if (idx === -1) return '';
+			var prev = idx > 0 ? questions[idx - 1] : null;
+			var next = idx < questions.length - 1 ? questions[idx + 1] : null;
+			if (prev) {
+				html += '<button class="bv-nav-btn bv-nav-prev" data-idx="' + (idx - 1) + '" data-mode="question">&larr; ' + escapeHtml(prev.number + ' ' + prev.title) + '</button>';
+			} else {
+				html += '<span></span>';
+			}
+			if (next) {
+				html += '<button class="bv-nav-btn bv-nav-next" data-idx="' + (idx + 1) + '" data-mode="question">' + escapeHtml(next.number + ' ' + next.title) + ' &rarr;</button>';
+			} else {
+				html += '<span></span>';
+			}
+
 		} else {
-			html += '<span></span>';
+			return '';
 		}
-		if (next) {
-			html += '<button class="bv-nav-btn bv-nav-next" data-idx="' + (idx + 1) + '">' + escapeHtml(next.number + ' ' + next.title) + ' &rarr;</button>';
-		} else {
-			html += '<span></span>';
-		}
+
 		html += '</div>';
 		return html;
 	}
@@ -198,11 +244,17 @@ var BookViewer = (function () {
 	function attachNavListeners() {
 		var btns = document.querySelectorAll('.bv-nav-btn');
 		var topics = getFlatTopics();
+		var questions = getFlatQuestions();
 		for (var i = 0; i < btns.length; i++) {
 			btns[i].addEventListener('click', (function(btn) {
 				return function() {
 					var idx = parseInt(btn.getAttribute('data-idx'), 10);
-					if (topics[idx]) loadSection(topics[idx]);
+					var mode = btn.getAttribute('data-mode');
+					if (mode === 'question') {
+						if (questions[idx]) loadSection(questions[idx]);
+					} else {
+						if (topics[idx]) loadSection(topics[idx]);
+					}
 				};
 			})(btns[i]));
 		}
@@ -223,9 +275,10 @@ var BookViewer = (function () {
 			}
 		}
 
-		// Re-run code prettify if available
+		// Re-run code prettify if available.
+		// lang-c_cpp is already normalised to lang-cpp by the server, so
+		// PR.prettyPrint can find the registered C/C++ handler directly.
 		if (window.PR && PR.prettyPrint) {
-			// Remove already-prettified marker so dynamic content gets re-processed
 			var blocks = contentArea.querySelectorAll('pre.prettyprint');
 			for (var pi = 0; pi < blocks.length; pi++) {
 				blocks[pi].classList.remove('prettyprinted');
@@ -651,7 +704,8 @@ var BookViewer = (function () {
 		popup.style.top = (rect.bottom + 4) + 'px';
 		popup.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
 		popup.style.zIndex = '10000';
-		document.body.appendChild(popup);
+		// Append inside the app so it is visible in native fullscreen mode
+		(document.getElementById('book-viewer-app') || document.body).appendChild(popup);
 
 		// Fetch list data for this question
 		var url = config.ajaxUrl + '?type=lists&postid=' + postId
@@ -778,7 +832,8 @@ var BookViewer = (function () {
 		popup.style.top = (rect.bottom + 4) + 'px';
 		popup.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
 		popup.style.zIndex = '10000';
-		document.body.appendChild(popup);
+		// Append inside the app so it is visible in native fullscreen mode
+		(document.getElementById('book-viewer-app') || document.body).appendChild(popup);
 
 		// Load existing note
 		var url = config.ajaxUrl + '?type=notes&postid=' + postId
@@ -1010,7 +1065,8 @@ var BookViewer = (function () {
 		popup.style.top = (rect.bottom + 4) + 'px';
 		popup.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
 		popup.style.zIndex = '10000';
-		document.body.appendChild(popup);
+		// Append inside the app so it is visible in native fullscreen mode
+		(document.getElementById('book-viewer-app') || document.body).appendChild(popup);
 
 		// Bind click handlers
 		var opts = popup.querySelectorAll('.bv-status-opt');

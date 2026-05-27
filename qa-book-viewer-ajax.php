@@ -182,6 +182,10 @@ class qa_book_ajax
 
 		$html = $this->extractSection($filePath, $sectionId, $sectionType);
 
+		// Normalize lang-c_cpp -> lang-cpp so Prettify r298 (which registers
+		// 'c','cpp','cxx' but NOT 'c_cpp') applies proper C/C++ highlighting.
+		$html = str_replace('lang-c_cpp', 'lang-cpp', $html);
+
 		echo json_encode(array(
 			'html' => $html,
 			'sectionId' => $sectionId,
