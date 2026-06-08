@@ -1645,10 +1645,20 @@ html:not([data-theme="light"]) .bv-modal-cancel:hover {
     padding: 12px 16px;
     margin: 10px 0;
     overflow-x: auto;
-    white-space: pre-wrap;
+	white-space: pre;
     line-height: 1.5;
     color: #333;
     tab-size: 4;
+}
+
+#bv-content-area pre.prettyprint,
+#bv-content-area pre.prettyprint * {
+	word-break: normal !important;
+	overflow-wrap: normal !important;
+}
+
+#bv-content-area pre.prettyprint span {
+	white-space: inherit !important;
 }
 
 /* linenums variant – ol wraps the lines, reset outer padding */
@@ -1665,7 +1675,7 @@ html:not([data-theme="light"]) .bv-modal-cancel:hover {
     tab-size: 4;
 }
 #bv-content-area pre.prettyprint ol.linenums > li {
-    white-space: pre-wrap;
+	white-space: pre;
     list-style-type: decimal;
     padding: 0;
     margin: 0;
