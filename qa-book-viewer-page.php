@@ -290,10 +290,22 @@ HTML;
 			if (strpos($line, 'class="question-title"') !== false) {
 				if (preg_match('/id="(question\d+)"/', $line, $idMatch) &&
 					preg_match('/<span class="number">([\d.]+)<\/span>([^<]+)<\/a>/', $line, $nameMatch)) {
+					$qTitle = trim($nameMatch[2]);
+
+					// Strip redundant topic name prefix from question title
+					if ($catIdx >= 0 && $topicIdx >= 0) {
+						$topicTitle = $toc[$catIdx]['children'][$topicIdx]['title'];
+						if (stripos($qTitle, $topicTitle . ':') === 0) {
+							$qTitle = trim(substr($qTitle, strlen($topicTitle) + 1));
+						} elseif (stripos($qTitle, $topicTitle . ' :') === 0) {
+							$qTitle = trim(substr($qTitle, strlen($topicTitle) + 2));
+						}
+					}
+
 					$question = array(
 						'id' => $idMatch[1],
 						'number' => $nameMatch[1],
-						'title' => trim($nameMatch[2]),
+						'title' => $qTitle,
 						'line' => $lineNum,
 						'type' => 'question',
 					);
