@@ -286,6 +286,24 @@
 	line-height: 1.5;
 }
 
+/* Keep pre/code layout intact inside extracted book content */
+#bv-content-area pre,
+#bv-content-area pre.prettyprint {
+	white-space: pre;
+	overflow-x: auto;
+	overflow-y: hidden;
+	word-break: normal;
+	overflow-wrap: normal;
+	text-align: left;
+	tab-size: 4;
+}
+
+#bv-content-area pre code {
+	white-space: inherit;
+	word-break: inherit;
+	overflow-wrap: inherit;
+}
+
 #bv-content-area .answer {
 	border-top: 1px dashed silver;
 	margin-bottom: 10px;
