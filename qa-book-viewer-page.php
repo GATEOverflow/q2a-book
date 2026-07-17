@@ -87,7 +87,7 @@ class qa_book_page
 			$sel = ($slug === $selectedBook) ? ' selected' : '';
 			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . qa_html($title) . '</option>';
 		}
-		$version = 15;
+		$version = 16;
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
@@ -142,6 +142,8 @@ class qa_book_page
 		<span id="bv-tag-count"></span>
 		<button id="bv-expand-all" onclick="BookViewer.expandAll()">Expand All</button>
 		<button id="bv-collapse-all" onclick="BookViewer.collapseAll()">Collapse All</button>
+		<button id="bv-hide-finished-btn" onclick="BookViewer.toggleFinishedFilter()" title="Hide finished sections">Hide Finished</button>
+		<button id="bv-practice-mode-btn" onclick="BookViewer.togglePracticeMode()" title="Practice Mode: answer questions before revealing">&#x1F3AF; Practice</button>
 		{$pdfButtonHtml}
 		<button id="bv-fullscreen" onclick="BookViewer.toggleFullscreen()" title="Fullscreen">&#x26F6;</button>
 	</div>

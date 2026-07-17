@@ -26,6 +26,15 @@ class qa_book_admin {
 				. 'PRIMARY KEY (userid, postid, site_prefix)'
 				. ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
 		}
+
+		if (!in_array(qa_db_add_table_prefix('book_topic_finished'), $tablescreated)) {
+			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_topic_finished ('
+				. 'userid INT NOT NULL,'
+				. 'book VARCHAR(255) NOT NULL,'
+				. 'topic_id VARCHAR(255) NOT NULL,'
+				. 'PRIMARY KEY (userid, book, topic_id)'
+				. ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+		}
 		if (!in_array(qa_db_add_table_prefix('book_pdf_requests'), $tablescreated)) {
 			$queries[] = 'CREATE TABLE IF NOT EXISTS ^book_pdf_requests (' .
 				'id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,' .

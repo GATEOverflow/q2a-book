@@ -143,6 +143,18 @@ class qa_book_ajax
 			return;
 		}
 
+		// Handle topic finished load via GET
+		if ($sectionType === 'topic_finished') {
+			$this->handleTopicFinishedLoad();
+			return;
+		}
+
+		// Handle topic finished toggle via POST
+		if (qa_post_text('type') === 'topic_finished_set') {
+			$this->handleTopicFinishedSet();
+			return;
+		}
+
 		if (empty($book) || empty($sectionId) || empty($sectionType)) {
 			echo json_encode(array('error' => 'Missing parameters'));
 			exit;
@@ -840,6 +852,80 @@ class qa_book_ajax
 		);
 
 		echo json_encode(array('success' => true, 'status' => $status));
+		exit;
+	}
+
+	// --- Topic Finished (server-stored) ---
+
+	/**
+	 * Load finished topics for the current user and book.
+	 * GET type=topic_finished&book=slug
+	 */
+	private function handleTopicFinishedLoad()
+	{
+		if (!qa_is_logged_in()) {
+			echo json_encode(array('loggedIn' => false));
+			exit;
+		}
+
+		$userid = qa_get_logged_in_userid();
+		$book = qa_get('book');
+
+		if (empty($book)) {
+			echo json_encode(array('error' => 'Missing book'));
+			exit;
+		}
+
+		$book = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $book);
+		$table = qa_db_add_table_prefix('book_topic_finished');
+
+		$rows = qa_db_read_all_values(qa_db_query_sub(
+			"SELECT topic_id FROM $table WHERE userid=# AND book=\$",
+			$userid, $book
+		));
+
+		echo json_encode(array('loggedIn' => true, 'finished' => $rows));
+		exit;
+	}
+
+	/**
+	 * Toggle a topic's finished state.
+	 * POST type=topic_finished_set, book=slug, topic_id=..., finished=1|0
+	 */
+	private function handleTopicFinishedSet()
+	{
+		if (!qa_is_logged_in()) {
+			echo json_encode(array('error' => 'Not logged in'));
+			exit;
+		}
+
+		$userid = qa_get_logged_in_userid();
+		$book = qa_post_text('book');
+		$topicId = qa_post_text('topic_id');
+		$finished = qa_post_text('finished') === '1';
+
+		if (empty($book) || empty($topicId)) {
+			echo json_encode(array('error' => 'Missing parameters'));
+			exit;
+		}
+
+		$book = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $book);
+		$topicId = preg_replace('/[^a-zA-Z0-9_\-]/', '', $topicId);
+		$table = qa_db_add_table_prefix('book_topic_finished');
+
+		if ($finished) {
+			qa_db_query_sub(
+				"INSERT IGNORE INTO $table (userid, book, topic_id) VALUES (#, \$, \$)",
+				$userid, $book, $topicId
+			);
+		} else {
+			qa_db_query_sub(
+				"DELETE FROM $table WHERE userid=# AND book=\$ AND topic_id=\$",
+				$userid, $book, $topicId
+			);
+		}
+
+		echo json_encode(array('success' => true, 'finished' => $finished));
 		exit;
 	}
 

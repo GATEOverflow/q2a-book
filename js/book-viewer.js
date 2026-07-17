@@ -13,6 +13,7 @@ var BookViewer = (function () {
 		tocData = config.toc || [];
 		if (tocData.length > 0) {
 			renderToc(tocData);
+			loadFinishedTopics();
 			restorePoint();
 		}
 	}
@@ -58,6 +59,30 @@ var BookViewer = (function () {
 				var spacer = document.createElement('span');
 				spacer.className = 'bv-toggle-spacer';
 				row.appendChild(spacer);
+			}
+
+			// Finished checkbox for topics
+			if (item.type === 'topic') {
+				var cb = document.createElement('input');
+				cb.type = 'checkbox';
+				cb.className = 'bv-finished-cb';
+				cb.title = 'Mark as finished';
+				cb.onchange = (function (it, liEl) {
+					return function (e) {
+						e.stopPropagation();
+						var checked = this.checked;
+						this.title = checked ? 'Mark as unfinished' : 'Mark as finished';
+						if (checked) {
+							liEl.classList.add('bv-finished');
+						} else {
+							liEl.classList.remove('bv-finished');
+						}
+						updateParentFinished(liEl);
+						applyFinishedFilter();
+						setTopicFinishedOnServer(it.id, checked);
+					};
+				})(item, li);
+				row.appendChild(cb);
 			}
 
 			var label = document.createElement('a');
@@ -317,6 +342,9 @@ var BookViewer = (function () {
 		initStatusFilter();
 		activeStatusFilters = [];
 		applyStatusFilter();
+
+		// Apply practice mode if active
+		if (practiceMode) applyPracticeMode();
 
 		// Scroll content to top
 		document.getElementById('bv-content').scrollTop = 0;
@@ -1237,12 +1265,372 @@ var BookViewer = (function () {
 		document.removeEventListener('mousedown', statusOutsideClickHandler);
 	}
 
+	// --- Section Finished (server-stored) ---
+
+	var hideFinished = false;
+	var finishedSet = {};
+
+	function loadFinishedTopics() {
+		if (!config.selectedBook || !config.userId) return;
+
+		var url = config.ajaxUrl + '?type=topic_finished&book=' + encodeURIComponent(config.selectedBook);
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var resp = JSON.parse(xhr.responseText);
+					if (resp.finished && resp.finished.length) {
+						for (var i = 0; i < resp.finished.length; i++) {
+							finishedSet[resp.finished[i]] = true;
+						}
+						applyFinishedState();
+					}
+				} catch (e) {}
+			}
+		};
+		xhr.send();
+	}
+
+	function applyFinishedState() {
+		var items = document.querySelectorAll('.bv-toc-type-topic');
+		for (var i = 0; i < items.length; i++) {
+			var id = items[i].getAttribute('data-id');
+			var cb = items[i].querySelector(':scope > .bv-toc-row .bv-finished-cb');
+			if (finishedSet[id]) {
+				items[i].classList.add('bv-finished');
+				if (cb) {
+					cb.checked = true;
+					cb.title = 'Mark as unfinished';
+				}
+			}
+		}
+		initParentFinishedState();
+		applyFinishedFilter();
+	}
+
+	function setTopicFinishedOnServer(topicId, finished) {
+		if (finished) {
+			finishedSet[topicId] = true;
+		} else {
+			delete finishedSet[topicId];
+		}
+
+		if (!config.userId) return;
+
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', config.ajaxUrl, true);
+		xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+		var body = 'type=topic_finished_set&book=' + encodeURIComponent(config.selectedBook)
+			+ '&topic_id=' + encodeURIComponent(topicId)
+			+ '&finished=' + (finished ? '1' : '0');
+		xhr.send(body);
+	}
+
+	function toggleFinishedFilter() {
+		hideFinished = !hideFinished;
+		var btn = document.getElementById('bv-hide-finished-btn');
+		if (btn) {
+			btn.classList.toggle('bv-sf-active', hideFinished);
+		}
+		applyFinishedFilter();
+	}
+
+	function initParentFinishedState() {
+		var categories = document.querySelectorAll('.bv-toc-type-category');
+		for (var i = 0; i < categories.length; i++) {
+			var childUl = categories[i].querySelector(':scope > ul');
+			if (!childUl) continue;
+			var childTopics = childUl.querySelectorAll(':scope > .bv-toc-type-topic');
+			if (!childTopics.length) continue;
+			var allFinished = true;
+			for (var j = 0; j < childTopics.length; j++) {
+				if (!childTopics[j].classList.contains('bv-finished')) {
+					allFinished = false;
+					break;
+				}
+			}
+			if (allFinished) {
+				categories[i].classList.add('bv-finished');
+			}
+		}
+	}
+
+	function updateParentFinished(topicLi) {
+		var parentUl = topicLi.parentElement;
+		if (!parentUl) return;
+		var parentLi = parentUl.parentElement;
+		if (!parentLi || !parentLi.classList.contains('bv-toc-type-category')) return;
+
+		var childTopics = parentUl.querySelectorAll(':scope > .bv-toc-type-topic');
+		if (!childTopics.length) return;
+
+		var allFinished = true;
+		for (var i = 0; i < childTopics.length; i++) {
+			if (!childTopics[i].classList.contains('bv-finished')) {
+				allFinished = false;
+				break;
+			}
+		}
+
+		if (allFinished) {
+			parentLi.classList.add('bv-finished');
+		} else {
+			parentLi.classList.remove('bv-finished');
+		}
+	}
+
+	function applyFinishedFilter() {
+		var topics = document.querySelectorAll('.bv-toc-type-topic');
+		for (var i = 0; i < topics.length; i++) {
+			if (hideFinished && topics[i].classList.contains('bv-finished')) {
+				topics[i].style.display = 'none';
+			} else {
+				topics[i].style.display = '';
+			}
+		}
+		// Also hide categories where all topics are finished
+		var categories = document.querySelectorAll('.bv-toc-type-category');
+		for (var i = 0; i < categories.length; i++) {
+			if (hideFinished && categories[i].classList.contains('bv-finished')) {
+				categories[i].style.display = 'none';
+			} else {
+				categories[i].style.display = '';
+			}
+		}
+	}
+
 	// --- Utility ---
 
 	function escapeHtml(str) {
 		var div = document.createElement('div');
 		div.appendChild(document.createTextNode(str));
 		return div.innerHTML;
+	}
+
+	// --- Practice Mode ---
+
+	var practiceMode = false;
+
+	function togglePracticeMode() {
+		practiceMode = !practiceMode;
+		var btn = document.getElementById('bv-practice-mode-btn');
+		if (btn) btn.classList.toggle('bv-sf-active', practiceMode);
+		var app = document.getElementById('book-viewer-app');
+		if (app) app.classList.toggle('bv-practice-on', practiceMode);
+		if (practiceMode) {
+			applyPracticeMode();
+		} else {
+			removePracticeMode();
+		}
+	}
+
+	function getQuestionType(questionEl) {
+		var tags = questionEl.querySelectorAll('.qa-tag-link');
+		for (var i = 0; i < tags.length; i++) {
+			var t = tags[i].textContent.trim().toLowerCase();
+			if (t === 'numerical-answers') return 'NAT';
+			if (t === 'multiple-selects') return 'MSQ';
+		}
+		return 'MCQ';
+	}
+
+	function getCorrectAnswer(questionEl) {
+		var ansEl = questionEl.querySelector('.bv-answer-value');
+		if (!ansEl) return null;
+		// Get text content excluding the link icon
+		var clone = ansEl.cloneNode(true);
+		var link = clone.querySelector('.bv-answer-link');
+		if (link) link.remove();
+		return clone.textContent.trim();
+	}
+
+	function applyPracticeMode() {
+		var questions = document.querySelectorAll('#bv-content-area .question');
+		for (var i = 0; i < questions.length; i++) {
+			var q = questions[i];
+			if (q.querySelector('.bv-practice-panel')) continue;
+
+			var correctAns = getCorrectAnswer(q);
+			if (!correctAns) continue;
+
+			var qType = getQuestionType(q);
+			var panel = document.createElement('div');
+			panel.className = 'bv-practice-panel';
+			panel.setAttribute('data-qtype', qType);
+			panel.setAttribute('data-answer', correctAns);
+
+			var postId = null;
+			var titleEl = q.querySelector('.question-title');
+			if (titleEl) postId = getPostIdFromTitle(titleEl);
+
+			if (postId) panel.setAttribute('data-postid', postId);
+
+			var html = '<div class="bv-practice-header"><span class="bv-practice-badge">' + qType + '</span><span class="bv-practice-title">Your Answer</span></div>';
+
+			if (qType === 'MCQ') {
+				var opts = ['A', 'B', 'C', 'D'];
+				html += '<div class="bv-practice-options bv-practice-grid">';
+				for (var j = 0; j < opts.length; j++) {
+					html += '<label class="bv-practice-opt"><input type="radio" name="bv-pq-' + i + '" value="' + opts[j] + '"><span class="bv-opt-letter">' + opts[j] + '</span></label>';
+				}
+				html += '</div>';
+			} else if (qType === 'MSQ') {
+				var opts = ['A', 'B', 'C', 'D'];
+				html += '<div class="bv-practice-options bv-practice-grid">';
+				for (var j = 0; j < opts.length; j++) {
+					html += '<label class="bv-practice-opt bv-opt-multi"><input type="checkbox" name="bv-pq-' + i + '" value="' + opts[j] + '"><span class="bv-opt-letter">' + opts[j] + '</span></label>';
+				}
+				html += '</div>';
+			} else {
+				html += '<div class="bv-practice-options"><input type="text" class="bv-practice-nat-input" placeholder="Type your numerical answer..."></div>';
+			}
+
+			html += '<div class="bv-practice-footer">';
+			html += '<div class="bv-practice-actions">';
+			html += '<button class="bv-practice-submit">&#x2713; Submit</button>';
+			html += '<button class="bv-practice-skip">&#x23ED; Skip</button>';
+			html += '</div>';
+			html += '<div class="bv-practice-result"></div>';
+			html += '</div>';
+
+			panel.innerHTML = html;
+
+			// Insert after question content, before answer key
+			var answerKeyEl = q.querySelector('.bv-answer-key');
+			if (answerKeyEl) {
+				answerKeyEl.parentNode.insertBefore(panel, answerKeyEl);
+			} else {
+				q.appendChild(panel);
+			}
+
+			// Bind submit
+			(function(panelEl, idx) {
+				panelEl.querySelector('.bv-practice-submit').onclick = function() {
+					submitPracticeAnswer(panelEl);
+				};
+				panelEl.querySelector('.bv-practice-skip').onclick = function() {
+					skipPracticeQuestion(panelEl);
+				};
+			})(panel, i);
+		}
+	}
+
+	function submitPracticeAnswer(panel) {
+		var qType = panel.getAttribute('data-qtype');
+		var correctAns = panel.getAttribute('data-answer').toUpperCase().trim();
+		var userAns = '';
+		var resultEl = panel.querySelector('.bv-practice-result');
+
+		if (qType === 'MCQ') {
+			var checked = panel.querySelector('input[type="radio"]:checked');
+			userAns = checked ? checked.value : '';
+		} else if (qType === 'MSQ') {
+			var checks = panel.querySelectorAll('input[type="checkbox"]:checked');
+			var vals = [];
+			for (var i = 0; i < checks.length; i++) vals.push(checks[i].value);
+			vals.sort();
+			userAns = vals.join(';');
+		} else {
+			var input = panel.querySelector('.bv-practice-nat-input');
+			userAns = input ? input.value.trim() : '';
+		}
+
+		if (!userAns) {
+			resultEl.textContent = 'Please select/enter an answer.';
+			resultEl.className = 'bv-practice-result bv-pr-warn';
+			return;
+		}
+
+		var isCorrect = checkAnswer(qType, userAns, correctAns);
+		var status = isCorrect ? 'completed' : 'wrong';
+
+		if (isCorrect) {
+			resultEl.innerHTML = '&#x2714; Correct!';
+			resultEl.className = 'bv-practice-result bv-pr-correct';
+		} else {
+			resultEl.innerHTML = '&#x2718; Wrong. Correct answer: ' + escapeHtml(correctAns);
+			resultEl.className = 'bv-practice-result bv-pr-wrong';
+		}
+
+		disablePanel(panel);
+		autoMarkStatus(panel, status);
+		revealAnswerKey(panel);
+	}
+
+	function skipPracticeQuestion(panel) {
+		var correctAns = panel.getAttribute('data-answer');
+		var resultEl = panel.querySelector('.bv-practice-result');
+		resultEl.innerHTML = '&#x23ED; Skipped. Answer: ' + escapeHtml(correctAns);
+		resultEl.className = 'bv-practice-result bv-pr-skip';
+		disablePanel(panel);
+		autoMarkStatus(panel, 'skipped');
+		revealAnswerKey(panel);
+	}
+
+	function checkAnswer(qType, userAns, correctAns) {
+		if (correctAns === 'X') return true; // all options correct
+
+		if (qType === 'MCQ') {
+			return userAns.toUpperCase() === correctAns.toUpperCase();
+		} else if (qType === 'MSQ') {
+			// correctAns could be like "A;B" or "A;B;C" (sorted letters separated by ;)
+			// or could be like "AB" or "A,B"
+			var correctLetters = correctAns.replace(/[^A-D]/gi, '').toUpperCase().split('').sort().join(';');
+			return userAns.toUpperCase() === correctLetters;
+		} else {
+			// NAT: compare numerically with tolerance
+			var userNum = parseFloat(userAns);
+			// correctAns might be a range like "2.5:2.7" or a single value
+			if (correctAns.indexOf(':') >= 0) {
+				var parts = correctAns.split(':');
+				var lo = parseFloat(parts[0]);
+				var hi = parseFloat(parts[1]);
+				return !isNaN(userNum) && userNum >= lo && userNum <= hi;
+			}
+			var correctNum = parseFloat(correctAns);
+			if (isNaN(userNum) || isNaN(correctNum)) {
+				return userAns.toLowerCase() === correctAns.toLowerCase();
+			}
+			// Allow 1% tolerance for NAT
+			var tol = Math.abs(correctNum) * 0.01;
+			if (tol < 0.01) tol = 0.01;
+			return Math.abs(userNum - correctNum) <= tol;
+		}
+	}
+
+	function disablePanel(panel) {
+		var inputs = panel.querySelectorAll('input');
+		for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+		var btns = panel.querySelectorAll('button');
+		for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+		panel.classList.add('bv-practice-done');
+	}
+
+	function revealAnswerKey(panel) {
+		var question = panel.closest('.question');
+		if (!question) return;
+		var ansVal = question.querySelector('.bv-answer-value');
+		if (ansVal) ansVal.classList.remove('bv-answer-hidden');
+	}
+
+	function autoMarkStatus(panel, status) {
+		var postId = panel.getAttribute('data-postid');
+		if (!postId || !config.userId) return;
+		var question = panel.closest('.question');
+		var siteUrl = '';
+		if (question) {
+			var titleEl = question.querySelector('.question-title');
+			if (titleEl) siteUrl = getSiteUrlFromTitle(titleEl);
+		}
+		setQuestionStatus(parseInt(postId, 10), siteUrl, status);
+	}
+
+	function removePracticeMode() {
+		var panels = document.querySelectorAll('.bv-practice-panel');
+		for (var i = 0; i < panels.length; i++) {
+			panels[i].remove();
+		}
 	}
 
 	// --- PDF / Hardcopy Request Modal ---
@@ -1358,6 +1746,8 @@ var BookViewer = (function () {
 		toggleList: toggleList,
 		openNotePopup: openNotePopup,
 		filterByStatus: filterByStatus,
+		toggleFinishedFilter: toggleFinishedFilter,
+		togglePracticeMode: togglePracticeMode,
 		requestPdf: requestPdf,
 		requestHardcopy: requestHardcopy,
 		closeModal: closeModal,

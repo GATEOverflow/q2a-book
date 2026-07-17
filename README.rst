@@ -60,6 +60,27 @@ Question Status Tracking
 - **Cross-site support** — Statuses are stored with the network site prefix, so they work correctly for cross-site questions
 - Stored in the ``^book_question_status`` table, created automatically on first use
 
+Topic Progress Tracking
+~~~~~~~~~~~~~~~~~~~~~~~
+- **Finished checkbox** — Each topic (subsection) in the TOC sidebar has a checkbox to mark it as finished
+- **Visual feedback** — Finished topics are shown with strikethrough + reduced opacity
+- **Parent auto-finish** — When all subtopics under a category are finished, the category is also marked finished
+- **Hide Finished filter** — A toolbar button hides all finished topics/categories from the TOC
+- **Server-stored** — Finished state is saved per-user per-book in the ``^book_topic_finished`` table (syncs across browsers)
+
+Practice Mode
+~~~~~~~~~~~~~
+- **Toggle** — Click the "🎯 Practice" button in the toolbar to enter practice mode
+- **Answer keys hidden** — When active, answer keys are blurred and locked until you submit
+- **MCQ** — Radio buttons (A/B/C/D) displayed as clickable tiles; default question type
+- **MSQ** — Checkboxes (A/B/C/D) for questions tagged ``multiple-selects``
+- **NAT** — Text input for numerical answers on questions tagged ``numerical-answers``
+- **Auto-check** — Compares your answer to the correct one on submit (with 1% tolerance for NAT, range support for ``lo:hi``)
+- **Auto-mark status** — Automatically sets the question as Completed, Wrong, or Skipped on the server
+- **Skip** — Skip button reveals the answer and marks as Skipped
+- **All-correct** — If the answer key is "X", any answer is accepted as correct
+- **Dark mode** — Full dark mode support for the practice panel
+
 ------------
 Installation
 ------------
