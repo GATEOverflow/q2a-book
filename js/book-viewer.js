@@ -11,6 +11,10 @@ var BookViewer = (function () {
 	function init() {
 		config = window.BookViewerConfig || {};
 		tocData = config.toc || [];
+
+		// Hide the site sidebar on every page load
+		try { localStorage.setItem('stw-sidebar-hidden', 'true'); } catch (e) {}
+
 		if (tocData.length > 0) {
 			renderToc(tocData);
 			loadFinishedTopics();
