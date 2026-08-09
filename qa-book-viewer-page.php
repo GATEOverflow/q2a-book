@@ -143,6 +143,7 @@ class qa_book_page
 		<button id="bv-expand-all" onclick="BookViewer.expandAll()">Expand All</button>
 		<button id="bv-collapse-all" onclick="BookViewer.collapseAll()">Collapse All</button>
 		<button id="bv-hide-finished-btn" onclick="BookViewer.toggleFinishedFilter()" title="Hide finished sections">Hide Finished</button>
+		<button id="bv-show-notes-btn" onclick="BookViewer.toggleShowNotes()" title="Show notes inline and auto-save on navigation">&#x1F4DD; Show Notes</button>
 		<button id="bv-practice-mode-btn" onclick="BookViewer.togglePracticeMode()" title="Practice Mode: answer questions before revealing">&#x1F3AF; Practice</button>
 		{$pdfButtonHtml}
 		<button id="bv-fullscreen" onclick="BookViewer.toggleFullscreen()" title="Fullscreen">&#x26F6;</button>

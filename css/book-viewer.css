@@ -1124,8 +1124,8 @@ html[data-theme="dark"] .category-intro {
 }
 
 .bv-lists-btn.bv-lists-active {
-	opacity: 0.85;
-	color: #1976d2;
+	opacity: 0.9;
+	color: #f5a623;
 }
 
 #bv-lists-popup {
@@ -1211,7 +1211,7 @@ html[data-theme="dark"] .bv-lists-check-label:hover {
 }
 
 html[data-theme="dark"] .bv-lists-btn.bv-lists-active {
-	color: #64b5f6;
+	color: #fdd835;
 }
 
 /* Notes Integration */
@@ -1238,6 +1238,18 @@ html[data-theme="dark"] .bv-lists-btn.bv-lists-active {
 .bv-note-btn.bv-note-active {
 	opacity: 0.85;
 	color: #e67e22;
+	position: relative;
+}
+
+.bv-note-btn.bv-note-active::after {
+	content: '';
+	position: absolute;
+	top: -2px;
+	right: 0;
+	width: 6px;
+	height: 6px;
+	background: #e67e22;
+	border-radius: 50%;
 }
 
 #bv-note-popup {
@@ -1363,6 +1375,10 @@ html[data-theme="dark"] #bv-note-textarea:focus {
 
 html[data-theme="dark"] .bv-note-btn.bv-note-active {
 	color: #f0a050;
+}
+
+html[data-theme="dark"] .bv-note-btn.bv-note-active::after {
+	background: #f0a050;
 }
 
 /* Question Status Button */
@@ -2243,4 +2259,155 @@ html[data-theme="dark"] .bv-pr-correct { color: #3fb950; }
 html[data-theme="dark"] .bv-pr-wrong { color: #f85149; }
 html[data-theme="dark"] .bv-pr-skip { color: #d29922; }
 html[data-theme="dark"] .bv-pr-warn { color: #8b949e; }
+
+/* =====================================================
+   Show Notes Button
+   ===================================================== */
+
+#bv-show-notes-btn.bv-sf-active {
+	background: #e67e22;
+	color: #fff;
+}
+
+html[data-theme="dark"] #bv-show-notes-btn.bv-sf-active {
+	background: #d35400;
+	color: #fff;
+}
+
+/* =====================================================
+   Inline Notes (Show Notes mode)
+   ===================================================== */
+
+.bv-inline-note {
+	margin: 10px 10px 16px;
+	padding: 0;
+	background: #fffbf0;
+	border: 1px solid #f0c36d;
+	border-radius: 6px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	font-size: 13px;
+	overflow: hidden;
+}
+
+.bv-inline-note-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 12px;
+	background: #fef3cd;
+	border-bottom: 1px solid #f0c36d;
+	font-weight: 600;
+	font-size: 12px;
+	color: #856404;
+}
+
+.bv-inline-note-icon {
+	font-size: 14px;
+}
+
+.bv-inline-note-textarea {
+	width: 100%;
+	box-sizing: border-box;
+	border: none;
+	padding: 10px 12px;
+	font-size: 13px;
+	font-family: inherit;
+	resize: vertical;
+	min-height: 60px;
+	background: #fffbf0;
+	color: #333;
+}
+
+.bv-inline-note-textarea:focus {
+	outline: none;
+	background: #fff;
+}
+
+.bv-inline-note-actions {
+	display: flex;
+	gap: 8px;
+	padding: 6px 12px;
+	border-top: 1px solid #f0c36d;
+	background: #fef3cd;
+}
+
+.bv-inline-note-update {
+	background: #1976d2;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 5px 14px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.bv-inline-note-update:hover {
+	background: #1565c0;
+}
+
+.bv-inline-note-delete {
+	background: #e53935;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 5px 14px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.bv-inline-note-delete:hover {
+	background: #c62828;
+}
+
+/* Dark mode — Inline Notes */
+html[data-theme="dark"] .bv-inline-note {
+	background: rgba(230, 126, 34, 0.08);
+	border-color: rgba(230, 126, 34, 0.3);
+}
+
+html[data-theme="dark"] .bv-inline-note-header {
+	background: rgba(230, 126, 34, 0.15);
+	border-bottom-color: rgba(230, 126, 34, 0.3);
+	color: #f0a050;
+}
+
+html[data-theme="dark"] .bv-inline-note-textarea {
+	background: rgba(230, 126, 34, 0.05);
+	color: #e0e0e0;
+}
+
+html[data-theme="dark"] .bv-inline-note-textarea:focus {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .bv-inline-note-actions {
+	background: rgba(230, 126, 34, 0.12);
+	border-top-color: rgba(230, 126, 34, 0.3);
+}
+
+/* =====================================================
+   Mobile — Inline Notes
+   ===================================================== */
+
+@media (max-width: 768px) {
+	.bv-inline-note {
+		margin: 8px 4px 12px;
+	}
+
+	.bv-inline-note-header {
+		padding: 5px 10px;
+		font-size: 11px;
+	}
+
+	.bv-inline-note-textarea {
+		padding: 8px 10px;
+		font-size: 12px;
+		min-height: 50px;
+	}
+
+	#bv-show-notes-btn {
+		padding: 6px 10px;
+		font-size: 12px;
+	}
+}
 

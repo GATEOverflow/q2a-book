@@ -7,6 +7,7 @@ var BookViewer = (function () {
 	var contentCache = {};
 
 	var lastLoadedItem = null;
+	var showNotesMode = false;
 
 	function init() {
 		config = window.BookViewerConfig || {};
@@ -340,6 +341,12 @@ var BookViewer = (function () {
 		// Fetch and inject notes buttons (only if notes plugin is available)
 		if (config.notesEnabled) injectNoteButtons();
 
+		// Load note indicators (orange dot) for questions that have notes
+		if (config.notesEnabled) loadNoteIndicators();
+
+		// Batch-load list membership for highlighting
+		if (config.listsEnabled) loadListMembership();
+
 		// Inject question status buttons and load statuses
 		injectStatusButtons();
 		loadQuestionStatuses();
@@ -349,6 +356,9 @@ var BookViewer = (function () {
 
 		// Apply practice mode if active
 		if (practiceMode) applyPracticeMode();
+
+		// Apply show notes mode if active
+		if (showNotesMode && !practiceMode) applyShowNotes();
 
 		// Scroll content to top
 		document.getElementById('bv-content').scrollTop = 0;
@@ -801,6 +811,9 @@ var BookViewer = (function () {
 					var resp = JSON.parse(xhr.responseText);
 					if (resp.error) {
 						showToast('Error: ' + (resp.message || resp.error));
+					} else {
+						// Update list button highlighting after toggle
+						updateListBtnHighlight(postId);
 					}
 				} catch (e) {}
 			}
@@ -808,6 +821,59 @@ var BookViewer = (function () {
 		var body = 'type=listtoggle&postid=' + postId + '&listid=' + listId + '&checked=' + (checked ? '1' : '0');
 		if (siteUrl) body += '&siteurl=' + encodeURIComponent(siteUrl);
 		xhr.send(body);
+	}
+
+	/**
+	 * Check if list button should be highlighted after a toggle.
+	 * Re-checks the popup checkboxes since the popup is still open.
+	 */
+	function updateListBtnHighlight(postId) {
+		var popup = document.getElementById('bv-lists-popup');
+		if (popup) {
+			var checks = popup.querySelectorAll('.bv-lists-check:checked');
+			var hasAny = checks.length > 0;
+			var btns = document.querySelectorAll('.bv-lists-btn[data-postid="' + postId + '"]');
+			for (var i = 0; i < btns.length; i++) {
+				if (hasAny) {
+					btns[i].classList.add('bv-lists-active');
+					btns[i].innerHTML = '&#9733;'; // filled star
+				} else {
+					btns[i].classList.remove('bv-lists-active');
+					btns[i].innerHTML = '&#9734;'; // empty star
+				}
+			}
+		}
+	}
+
+	/**
+	 * Batch-load list membership for all visible questions to highlight list buttons.
+	 */
+	function loadListMembership() {
+		var btns = document.querySelectorAll('#bv-content-area .bv-lists-btn');
+		if (!btns.length) return;
+
+		for (var i = 0; i < btns.length; i++) {
+			(function(btn) {
+				var postId = btn.getAttribute('data-postid');
+				var siteUrl = btn.getAttribute('data-siteurl') || '';
+				var url = config.ajaxUrl + '?type=lists&postid=' + postId
+					+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
+				var xhr = new XMLHttpRequest();
+				xhr.open('GET', url, true);
+				xhr.onreadystatechange = function () {
+					if (xhr.readyState === 4 && xhr.status === 200) {
+						try {
+							var data = JSON.parse(xhr.responseText);
+							if (data.loggedIn && data.checkedLists && data.checkedLists.length > 0) {
+								btn.classList.add('bv-lists-active');
+								btn.innerHTML = '&#9733;'; // filled star
+							}
+						} catch (e) {}
+					}
+				};
+				xhr.send();
+			})(btns[i]);
+		}
 	}
 
 	function outsideClickHandler(e) {
@@ -996,6 +1062,117 @@ var BookViewer = (function () {
 		var popup = document.getElementById('bv-note-popup');
 		if (popup) popup.remove();
 		document.removeEventListener('mousedown', noteOutsideClickHandler);
+	}
+
+	// --- Show Notes Mode ---
+
+	function toggleShowNotes() {
+		showNotesMode = !showNotesMode;
+		var btn = document.getElementById('bv-show-notes-btn');
+		if (btn) btn.classList.toggle('bv-sf-active', showNotesMode);
+		if (showNotesMode && !practiceMode) {
+			applyShowNotes();
+		} else {
+			removeInlineNotes();
+		}
+	}
+
+	function applyShowNotes() {
+		var titles = document.querySelectorAll('#bv-content-area .question-title');
+		for (var i = 0; i < titles.length; i++) {
+			var question = titles[i].closest('.question');
+			if (!question || question.querySelector('.bv-inline-note')) continue;
+			var postId = getPostIdFromTitle(titles[i]);
+			if (!postId) continue;
+			var siteUrl = getSiteUrlFromTitle(titles[i]);
+
+			// Load note from server; only show section if note exists
+			loadAndShowInlineNote(postId, siteUrl, question);
+		}
+	}
+
+	function loadAndShowInlineNote(postId, siteUrl, question) {
+		var url = config.ajaxUrl + '?type=notes&postid=' + postId
+			+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				try {
+					var data = JSON.parse(xhr.responseText);
+					if (data.loggedIn !== false && data.note && data.note.length > 0) {
+						renderInlineNote(postId, siteUrl, question, data.note);
+						updateNoteBtnState(parseInt(postId), true);
+					}
+				} catch (e) {}
+			}
+		};
+		xhr.send();
+	}
+
+	function renderInlineNote(postId, siteUrl, question, noteText) {
+		if (question.querySelector('.bv-inline-note')) return;
+
+		var noteDiv = document.createElement('div');
+		noteDiv.className = 'bv-inline-note';
+		noteDiv.setAttribute('data-postid', postId);
+		noteDiv.setAttribute('data-siteurl', siteUrl);
+		noteDiv.innerHTML = '<div class="bv-inline-note-header"><span class="bv-inline-note-icon">&#x1F4DD;</span> <span class="bv-inline-note-label">My Note</span></div>'
+			+ '<textarea class="bv-inline-note-textarea" rows="3">' + escapeHtml(noteText) + '</textarea>'
+			+ '<div class="bv-inline-note-actions">'
+			+ '<button class="bv-inline-note-update">Update</button>'
+			+ '<button class="bv-inline-note-delete">Delete</button>'
+			+ '</div>';
+		question.appendChild(noteDiv);
+
+		noteDiv.querySelector('.bv-inline-note-update').onclick = function () {
+			var text = noteDiv.querySelector('.bv-inline-note-textarea').value.trim();
+			saveNote(parseInt(postId), siteUrl, text);
+			showToast('Note updated');
+		};
+		noteDiv.querySelector('.bv-inline-note-delete').onclick = function () {
+			deleteNote(parseInt(postId), siteUrl);
+			noteDiv.remove();
+		};
+	}
+
+	function removeInlineNotes() {
+		var notes = document.querySelectorAll('#bv-content-area .bv-inline-note');
+		for (var i = 0; i < notes.length; i++) {
+			notes[i].remove();
+		}
+	}
+
+	/**
+	 * Load note indicators for all visible questions.
+	 * Reuses the same load call that Show Notes uses but only marks the button.
+	 */
+	function loadNoteIndicators() {
+		var btns = document.querySelectorAll('#bv-content-area .bv-note-btn');
+		if (!btns.length) return;
+
+		for (var i = 0; i < btns.length; i++) {
+			(function(btn) {
+				var postId = btn.getAttribute('data-postid');
+				var siteUrl = btn.getAttribute('data-siteurl') || '';
+				var url = config.ajaxUrl + '?type=notes&postid=' + postId
+					+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
+				var xhr = new XMLHttpRequest();
+				xhr.open('GET', url, true);
+				xhr.onreadystatechange = function () {
+					if (xhr.readyState === 4 && xhr.status === 200) {
+						try {
+							var data = JSON.parse(xhr.responseText);
+							if (data.loggedIn !== false && data.note && data.note.length > 0) {
+								btn.classList.add('bv-note-active');
+								btn.title = 'Edit Note';
+							}
+						} catch (e) {}
+					}
+				};
+				xhr.send();
+			})(btns[i]);
+		}
 	}
 
 	// --- Question Status Integration ---
@@ -1751,6 +1928,7 @@ var BookViewer = (function () {
 		openNotePopup: openNotePopup,
 		filterByStatus: filterByStatus,
 		toggleFinishedFilter: toggleFinishedFilter,
+		toggleShowNotes: toggleShowNotes,
 		togglePracticeMode: togglePracticeMode,
 		requestPdf: requestPdf,
 		requestHardcopy: requestHardcopy,
