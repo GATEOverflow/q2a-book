@@ -852,28 +852,38 @@ var BookViewer = (function () {
 		var btns = document.querySelectorAll('#bv-content-area .bv-lists-btn');
 		if (!btns.length) return;
 
+		// Group by siteUrl and request all postids in one call per group
+		var groups = {};
 		for (var i = 0; i < btns.length; i++) {
-			(function(btn) {
-				var postId = btn.getAttribute('data-postid');
-				var siteUrl = btn.getAttribute('data-siteurl') || '';
-				var url = config.ajaxUrl + '?type=lists&postid=' + postId
-					+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
-				var xhr = new XMLHttpRequest();
-				xhr.open('GET', url, true);
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState === 4 && xhr.status === 200) {
-						try {
-							var data = JSON.parse(xhr.responseText);
-							if (data.loggedIn && data.checkedLists && data.checkedLists.length > 0) {
-								btn.classList.add('bv-lists-active');
-								btn.innerHTML = '&#9733;'; // filled star
-							}
-						} catch (e) {}
-					}
-				};
-				xhr.send();
-			})(btns[i]);
+			var su = btns[i].getAttribute('data-siteurl') || '';
+			if (!groups[su]) groups[su] = [];
+			groups[su].push(btns[i].getAttribute('data-postid'));
 		}
+
+		Object.keys(groups).forEach(function (su) {
+			var postids = groups[su].join(',');
+			var url = config.ajaxUrl + '?type=lists&postids=' + encodeURIComponent(postids)
+				+ (su ? '&siteurl=' + encodeURIComponent(su) : '');
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', url, true);
+			xhr.onreadystatechange = function () {
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					try {
+						var data = JSON.parse(xhr.responseText);
+						if (data.membership) {
+							Object.keys(data.membership).forEach(function (pid) {
+								var matches = document.querySelectorAll('#bv-content-area .bv-lists-btn[data-postid="' + pid + '"]');
+								for (var m = 0; m < matches.length; m++) {
+									matches[m].classList.add('bv-lists-active');
+									matches[m].innerHTML = '&#9733;'; // filled star
+								}
+							});
+						}
+					} catch (e) {}
+				}
+			};
+			xhr.send();
+		});
 	}
 
 	function outsideClickHandler(e) {
@@ -1151,28 +1161,34 @@ var BookViewer = (function () {
 		var btns = document.querySelectorAll('#bv-content-area .bv-note-btn');
 		if (!btns.length) return;
 
+		// Group by siteUrl and request all postids in one call per group
+		var groups = {};
 		for (var i = 0; i < btns.length; i++) {
-			(function(btn) {
-				var postId = btn.getAttribute('data-postid');
-				var siteUrl = btn.getAttribute('data-siteurl') || '';
-				var url = config.ajaxUrl + '?type=notes&postid=' + postId
-					+ (siteUrl ? '&siteurl=' + encodeURIComponent(siteUrl) : '');
-				var xhr = new XMLHttpRequest();
-				xhr.open('GET', url, true);
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState === 4 && xhr.status === 200) {
-						try {
-							var data = JSON.parse(xhr.responseText);
-							if (data.loggedIn !== false && data.note && data.note.length > 0) {
-								btn.classList.add('bv-note-active');
-								btn.title = 'Edit Note';
-							}
-						} catch (e) {}
-					}
-				};
-				xhr.send();
-			})(btns[i]);
+			var su = btns[i].getAttribute('data-siteurl') || '';
+			if (!groups[su]) groups[su] = [];
+			groups[su].push(btns[i].getAttribute('data-postid'));
 		}
+
+		Object.keys(groups).forEach(function (su) {
+			var postids = groups[su].join(',');
+			var url = config.ajaxUrl + '?type=notes&postids=' + encodeURIComponent(postids)
+				+ (su ? '&siteurl=' + encodeURIComponent(su) : '');
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', url, true);
+			xhr.onreadystatechange = function () {
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					try {
+						var data = JSON.parse(xhr.responseText);
+						if (data.notes) {
+							Object.keys(data.notes).forEach(function (pid) {
+								updateNoteBtnState(parseInt(pid), true);
+							});
+						}
+					} catch (e) {}
+				}
+			};
+			xhr.send();
+		});
 	}
 
 	// --- Question Status Integration ---

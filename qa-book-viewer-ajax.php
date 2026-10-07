@@ -455,6 +455,46 @@ class qa_book_ajax
 		}
 
 		$userid = qa_get_logged_in_userid();
+
+		// Batch mode: ?type=lists&postids=1,2,3 -> returns map of postid => listids for highlighting
+		$postidsRaw = qa_get('postids');
+		if (!empty($postidsRaw)) {
+			$prefix = $this->resolvePrefix(qa_get('siteurl'));
+			$table = $prefix . 'userquestionlists';
+			$postids = array_values(array_unique(array_map('intval', array_filter(explode(',', $postidsRaw)))));
+
+			if (empty($postids)) {
+				echo json_encode(array('loggedIn' => true, 'membership' => new \stdClass()));
+				exit;
+			}
+
+			$placeholders = implode(',', array_fill(0, count($postids), '#'));
+			$params = array_merge(array($userid), $postids);
+
+			try {
+				$rows = qa_db_read_all_assoc(qa_db_query_sub(
+					"SELECT questionid, listids FROM $table WHERE userid=# AND questionid IN ($placeholders)",
+					...$params
+				));
+			} catch (Exception $e) {
+				echo json_encode(array('error' => 'Lists table not found'));
+				exit;
+			}
+
+			$membership = array();
+			foreach ($rows as $row) {
+				if (!empty($row['listids'])) {
+					$membership[$row['questionid']] = array_map('intval', explode(',', $row['listids']));
+				}
+			}
+
+			echo json_encode(array(
+				'loggedIn' => true,
+				'membership' => !empty($membership) ? $membership : new \stdClass(),
+			));
+			exit;
+		}
+
 		$postid = (int) qa_get('postid');
 
 		if (!$postid) {
@@ -649,6 +689,46 @@ class qa_book_ajax
 		}
 
 		$userid = qa_get_logged_in_userid();
+
+		// Batch mode: ?type=notes&postids=1,2,3 -> returns map of postid => note (non-empty only)
+		$postidsRaw = qa_get('postids');
+		if (!empty($postidsRaw)) {
+			$prefix = $this->resolvePrefix(qa_get('siteurl'));
+			$table = $prefix . 'usernote';
+			$postids = array_values(array_unique(array_map('intval', array_filter(explode(',', $postidsRaw)))));
+
+			if (empty($postids)) {
+				echo json_encode(array('loggedIn' => true, 'notes' => new \stdClass()));
+				exit;
+			}
+
+			$placeholders = implode(',', array_fill(0, count($postids), '#'));
+			$params = array_merge(array($userid), $postids);
+
+			try {
+				$rows = qa_db_read_all_assoc(qa_db_query_sub(
+					"SELECT postid, note FROM $table WHERE userid=# AND postid IN ($placeholders)",
+					...$params
+				));
+			} catch (Exception $e) {
+				echo json_encode(array('error' => 'Notes table not found'));
+				exit;
+			}
+
+			$notes = array();
+			foreach ($rows as $row) {
+				if ($row['note'] !== null && $row['note'] !== '') {
+					$notes[$row['postid']] = $row['note'];
+				}
+			}
+
+			echo json_encode(array(
+				'loggedIn' => true,
+				'notes' => !empty($notes) ? $notes : new \stdClass(),
+			));
+			exit;
+		}
+
 		$postid = (int) qa_get('postid');
 
 		if (!$postid) {
