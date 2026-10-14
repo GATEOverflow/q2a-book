@@ -193,6 +193,14 @@
 	max-width: 900px;
 }
 
+#bv-content-area .page,
+#bv-content-area .question-content,
+#bv-content-area .question-text,
+#bv-content-area .answers,
+#bv-content-area .answer-content {
+	display: flow-root;
+}
+
 .bv-placeholder {
 	color: #888;
 	font-style: italic;
@@ -395,6 +403,8 @@
 	margin-bottom: 10px;
 	margin-left: 10px;
 	clear: both;
+	overflow-x: auto;
+	overflow-y: visible;
 }
 
 /* Clear separation between questions */
@@ -478,33 +488,53 @@ html[data-theme="dark"] #bv-content-area .question {
 
 /* Shrink inline options (MCQ choices) */
 #bv-content-area .shrink-inline-options li,
-#bv-content-area .shrink-inline-options2 li {
+#bv-content-area .shrink-inline-options2 li,
+#bv-content-area .shrink-inline-options5 li {
 	white-space: nowrap;
-	float: left;
+	float: none;
 	font-size: 20px;
 	line-height: 40px;
 	box-sizing: border-box;
-	padding-right: 8px;
-}
-
-#bv-content-area .shrink-inline-options li {
-	width: 24%;
-}
-
-#bv-content-area .shrink-inline-options2 li {
-	width: 50%;
-}
-
-#bv-content-area .shrink-inline-options2 > li:nth-child(3),
-#bv-content-area .shrink-inline-options2 > li:nth-child(5) {
-	clear: left;
+	padding-right: 16px;
+	min-width: max-content;
 }
 
 #bv-content-area .noshrink-inline-options,
 #bv-content-area .shrink-inline-options,
-#bv-content-area .shrink-inline-options2 {
+#bv-content-area .shrink-inline-options2,
+#bv-content-area .shrink-inline-options5 {
 	font-size: 20px;
-	overflow: hidden;
+	overflow-x: auto;
+	overflow-y: hidden;
+	display: grid;
+	gap: 0 12px;
+	align-items: start;
+	justify-content: start;
+	width: 100%;
+	max-width: 100%;
+	padding-bottom: 4px;
+	-webkit-overflow-scrolling: touch;
+}
+
+#bv-content-area .noshrink-inline-options {
+	grid-template-columns: minmax(max-content, 1fr);
+}
+
+#bv-content-area .shrink-inline-options {
+	grid-template-columns: repeat(4, minmax(max-content, 1fr));
+}
+
+#bv-content-area .shrink-inline-options2 {
+	grid-template-columns: repeat(2, minmax(max-content, 1fr));
+}
+
+#bv-content-area .shrink-inline-options5 {
+	grid-template-columns: repeat(5, minmax(max-content, 1fr));
+}
+
+#bv-content-area .shrink-inline-options2 > li:nth-child(3),
+#bv-content-area .shrink-inline-options2 > li:nth-child(5) {
+	clear: none;
 }
 
 #bv-content-area .question-text ol {
@@ -1620,7 +1650,6 @@ html[data-theme="dark"] .bv-status-btn.bv-qs-wrong     { color: #ef5350; }
 html[data-theme="dark"] .question[data-qstatus="completed"] { border-left-color: #66bb6a; }
 html[data-theme="dark"] .question[data-qstatus="skipped"]   { border-left-color: #fdd835; }
 html[data-theme="dark"] .question[data-qstatus="wrong"]     { border-left-color: #ef5350; }
-}}
 
 /* =====================================================
    PDF Download + Request Hardcopy buttons

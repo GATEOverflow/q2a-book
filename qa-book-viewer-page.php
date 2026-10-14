@@ -87,7 +87,7 @@ class qa_book_page
 			$sel = ($slug === $selectedBook) ? ' selected' : '';
 			$bookOptions .= '<option value="' . qa_html($slug) . '"' . $sel . '>' . qa_html($title) . '</option>';
 		}
-		$version = 18;
+		$version = 19;
 
 		$rootUrl = qa_path_html('book');
 		$ajaxUrl = qa_path_html('book-ajax');
