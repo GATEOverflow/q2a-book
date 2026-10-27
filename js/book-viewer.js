@@ -1776,23 +1776,36 @@ var BookViewer = (function () {
 			var correctLetters = correctAns.replace(/[^A-D]/gi, '').toUpperCase().split('').sort().join(';');
 			return userAns.toUpperCase() === correctLetters;
 		} else {
-			// NAT: compare numerically with tolerance
+			// NAT: compare numerically with tolerance.
+			// correctAns may contain multiple comma-separated groups, each either
+			// a range "lo:hi" or a single value, e.g. "212.9:215.3, 216.5:216.7"
 			var userNum = parseFloat(userAns);
-			// correctAns might be a range like "2.5:2.7" or a single value
-			if (correctAns.indexOf(':') >= 0) {
-				var parts = correctAns.split(':');
-				var lo = parseFloat(parts[0]);
-				var hi = parseFloat(parts[1]);
-				return !isNaN(userNum) && userNum >= lo && userNum <= hi;
+			if (isNaN(userNum)) return false;
+
+			var groups = correctAns.split(',');
+			for (var g = 0; g < groups.length; g++) {
+				var group = groups[g].trim();
+				if (!group) continue;
+
+				if (group.indexOf(':') >= 0) {
+					var parts = group.split(':');
+					var lo = parseFloat(parts[0]);
+					var hi = parseFloat(parts[1]);
+					if (!isNaN(lo) && !isNaN(hi) && userNum >= lo && userNum <= hi) {
+						return true;
+					}
+				} else {
+					var correctNum = parseFloat(group);
+					if (isNaN(correctNum)) {
+						if (userAns.toLowerCase() === group.toLowerCase()) return true;
+						continue;
+					}
+					// Small epsilon only to absorb floating-point rounding, not a real tolerance
+					var tol = 1e-6;
+					if (Math.abs(userNum - correctNum) <= tol) return true;
+				}
 			}
-			var correctNum = parseFloat(correctAns);
-			if (isNaN(userNum) || isNaN(correctNum)) {
-				return userAns.toLowerCase() === correctAns.toLowerCase();
-			}
-			// Allow 1% tolerance for NAT
-			var tol = Math.abs(correctNum) * 0.01;
-			if (tol < 0.01) tol = 0.01;
-			return Math.abs(userNum - correctNum) <= tol;
+			return false;
 		}
 	}
 
